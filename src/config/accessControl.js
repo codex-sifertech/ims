@@ -7,17 +7,9 @@ export const USER_ROLES = {
 
 // Hardcoded user access list as requested
 export const accessList = {
-    'admin@ims.com': {
+    'sifertech.co@gmail.com': {
         role: USER_ROLES.MASTER_ADMIN,
-        name: 'Master Admin'
-    },
-    'ops@ims.com': {
-        role: USER_ROLES.OPERATION_MANAGER,
-        name: 'Operations Manager'
-    },
-    'user@ims.com': {
-        role: USER_ROLES.MEMBER,
-        name: 'Team Member'
+        name: 'SiferTech Master'
     }
 };
 

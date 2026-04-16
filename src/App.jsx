@@ -56,13 +56,21 @@ function App() {
         // Find existing authorized role if any
         const accessCheck = validateUserAccess(firebaseUser.email);
         
+        if (!accessCheck) {
+          console.warn("Unauthorized access attempt:", firebaseUser.email);
+          setUser(null);
+          auth.signOut();
+          setLoading(false);
+          return;
+        }
+
         const userData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
-          role: accessCheck?.role || 'member',
-          name: firebaseUser.displayName || accessCheck?.name || 'User'
+          role: accessCheck.role,
+          name: firebaseUser.displayName || accessCheck.name || 'User'
         };
         
         setUser(userData);
