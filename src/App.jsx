@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebase';
@@ -47,7 +48,7 @@ function MainRoute() {
 }
 
 function App() {
-  const { setLoading, setCompanies, setUser, setActiveCompany } = useStore();
+  const { setLoading, setCompanies, setUser, setActiveCompany, activeCompany } = useStore();
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
