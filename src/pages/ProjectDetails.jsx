@@ -1,39 +1,59 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MonitorPlay, Users, Settings, Play, Network, ListTree, MessageSquare, ChevronLeft } from 'lucide-react';
+import { 
+    ArrowLeft, 
+    MonitorPlay, 
+    Users, 
+    Settings, 
+    Play, 
+    Network, 
+    ListTree, 
+    MessageSquare, 
+    ChevronLeft,
+    Clock,
+    Activity,
+    Calendar,
+    Sparkles,
+    Loader2,
+    AlertCircle
+} from 'lucide-react';
 import useStore from '../store/useStore';
-import { useSharedProjects } from '../hooks/useSharedProjects';
+import { useProject } from '../hooks/useProject';
 import ScreenShareViewer from '../components/projects/ScreenShareViewer';
 import MindMapEditor from '../components/projects/mindmap/MindMapEditor';
 import WorkflowEditor from '../components/projects/workflow/WorkflowEditor';
 import ProjectCollaborationSidebar from '../components/projects/ProjectCollaborationSidebar';
 import ProjectInternalKanban from '../components/projects/ProjectInternalKanban';
-import { useState } from 'react';
+import ProjectOverview from '../components/projects/ProjectOverview';
+import ProjectSettings from '../components/projects/ProjectSettings';
 
 export default function ProjectDetails() {
     const { projectId } = useParams();
     const navigate = useNavigate();
-    const { columns } = useSharedProjects();
+    const { project, loading, updateProjectData } = useProject(projectId);
     const [activeTab, setActiveTab] = useState('overview');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-    // Find the project details from the kanban layout
-    let project = null;
-    let currentStatus = '';
-    for (const col of columns) {
-        const found = col.cards.find(c => c.id === projectId);
-        if (found) {
-            project = found;
-            currentStatus = col.title;
-            break;
-        }
+    if (loading) {
+        return (
+            <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-4 bg-dark-900">
+                <Loader2 className="animate-spin text-primary-500" size={40} />
+                <p className="text-lg font-medium">Syncing project data...</p>
+            </div>
+        );
     }
 
     if (!project) {
         return (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                <p>Project not found or you don't have access.</p>
-                <button onClick={() => navigate('/dashboard/projects')} className="mt-4 text-primary-500 hover:underline">
-                    Back to Projects
+            <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-4 bg-dark-900">
+                <AlertCircle size={48} className="text-red-500" />
+                <h2 className="text-2xl font-bold text-white">Project Not Found</h2>
+                <p>The project you are looking for does not exist or you don't have access.</p>
+                <button 
+                    onClick={() => navigate('/dashboard/projects')}
+                    className="mt-4 px-6 py-2 bg-dark-800 hover:bg-dark-700 text-white rounded-xl transition-all border border-dark-700 font-medium"
+                >
+                    Back to Ecosystem
                 </button>
             </div>
         );
@@ -53,10 +73,14 @@ export default function ProjectDetails() {
                         </button>
                         <div>
                             <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-primary-600/20 text-primary-400 border border-primary-500/20">
-                                    {currentStatus}
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase border ${
+                                    project.status === 'completed' 
+                                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
+                                        : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                }`}>
+                                    {project.status || 'Ongoing'}
                                 </span>
-                                <span className="text-sm text-slate-500 font-mono">#{project.id.split('-')[1].substring(0, 6)}</span>
+                                <span className="text-sm text-slate-500 font-mono">#{project.id.substring(0, 8)}</span>
                             </div>
                             <h1 className="text-2xl font-bold text-white mt-1 leading-tight">{project.title}</h1>
                         </div>
@@ -123,41 +147,7 @@ export default function ProjectDetails() {
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
                     {activeTab === 'overview' && (
-                        <div className="max-w-4xl mx-auto space-y-6">
-                            <section className="bg-dark-800 border border-dark-700 rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold text-white mb-2">Description</h3>
-                                <p className="text-slate-300 leading-relaxed min-h-[100px]">{project.desc}</p>
-                            </section>
-
-                            <div className="grid grid-cols-2 gap-6">
-                                <section className="bg-dark-800 border border-dark-700 rounded-2xl p-6">
-                                    <h3 className="text-lg font-semibold text-white mb-4">Live Team Activity</h3>
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-center p-4 text-center border border-dashed border-dark-600 rounded-xl bg-dark-900/50">
-                                            <p className="text-sm text-slate-500">No recent team activity in this project.</p>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <section className="bg-dark-800 border border-dark-700 rounded-2xl p-6">
-                                    <h3 className="text-lg font-semibold text-white mb-4">Project Stats</h3>
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-400">Created By</span>
-                                            <span className="text-white font-medium">{project.createdBy || 'Unknown'}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-400">Total Hours</span>
-                                            <span className="text-white font-medium">{Math.floor(project.timeLogged / 60)}h {project.timeLogged % 60}m</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-400">Active Viewers</span>
-                                            <span className="text-emerald-400 font-medium flex items-center gap-1"><Users size={14} /> 3 Online</span>
-                                        </div>
-                                    </div>
-                                </section>
-                            </div>
-                        </div>
+                        <ProjectOverview project={project} />
                     )}
 
                     {activeTab === 'kanban' && (
@@ -169,11 +159,11 @@ export default function ProjectDetails() {
                     )}
 
                     {activeTab === 'mindmap' && (
-                        <MindMapEditor projectId={projectId} />
+                        <MindMapEditor projectId={projectId} projectData={project} onUpdate={updateProjectData} />
                     )}
 
                     {activeTab === 'workflow' && (
-                        <WorkflowEditor projectId={projectId} />
+                        <WorkflowEditor projectId={projectId} projectData={project} onUpdate={updateProjectData} />
                     )}
 
                     {activeTab === 'ai' && (
@@ -187,6 +177,10 @@ export default function ProjectDetails() {
                                 </button>
                             </div>
                         </div>
+                    )}
+                    
+                    {activeTab === 'settings' && (
+                        <ProjectSettings project={project} onUpdate={updateProjectData} />
                     )}
                 </div>
             </div>

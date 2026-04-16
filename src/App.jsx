@@ -1,6 +1,9 @@
-import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, db } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import useStore from './store/useStore';
+import { validateUserAccess } from './config/accessControl';
 
 // Components
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -44,18 +47,47 @@ function MainRoute() {
 }
 
 function App() {
-  const { setLoading, setCompanies, activeCompany } = useStore();
-
+  const { setLoading, setCompanies, setUser, setActiveCompany } = useStore();
+  
   useEffect(() => {
-    // Inject mock companies so the user has something to select initially
-    const mockCompanies = [
-      { id: 'personal', name: 'Personal Workspace' },
-      { id: 'alpha-corp', name: 'Alpha Corp' }
-    ];
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // Find existing authorized role if any
+        const accessCheck = validateUserAccess(firebaseUser.email);
+        
+        const userData = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+          role: accessCheck?.role || 'member',
+          name: firebaseUser.displayName || accessCheck?.name || 'User'
+        };
+        
+        setUser(userData);
+        
+        // Mock companies for now, but in reality these should come from Firestore
+        const mockCompanies = [
+          { id: 'personal', name: 'Personal Workspace' },
+          { id: 'alpha-corp', name: 'Alpha Corp' }
+        ];
+        setCompanies(mockCompanies);
 
-    setCompanies(mockCompanies);
-    setLoading(false);
-  }, [setLoading, setCompanies]);
+        // Try to keep selection if it was there
+        const savedCompany = localStorage.getItem('activeCompany');
+        if (savedCompany) {
+          setActiveCompany(JSON.parse(savedCompany));
+        } else {
+          setActiveCompany(mockCompanies[0]);
+        }
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [setLoading, setCompanies, setUser, setActiveCompany]);
 
   return (
     <Router>

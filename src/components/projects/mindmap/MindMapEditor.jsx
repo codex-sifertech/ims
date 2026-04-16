@@ -33,14 +33,36 @@ const initialNodes = [
 
 const initialEdges = [];
 
-function MindMapContent({ projectId }) {
+function MindMapContent({ projectId, projectData, onUpdate }) {
   const nodeTypes = useMemo(() => ({ advanced: AdvancedMindMapNode }), []);
   
   const { setProjectNodes } = useStore();
-  const [nodes, setNodes] = useState(initialNodes);
-  const [edges, setEdges] = useState(initialEdges);
+  
+  // Use data from props if available
+  const [nodes, setNodes] = useState(projectData?.mindmap?.nodes || initialNodes);
+  const [edges, setEdges] = useState(projectData?.mindmap?.edges || initialEdges);
   const reactFlowWrapper = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
+
+  // Sync with projectData prop updates
+  useEffect(() => {
+    if (projectData?.mindmap?.nodes) setNodes(projectData.mindmap.nodes);
+    if (projectData?.mindmap?.edges) setEdges(projectData.mindmap.edges);
+  }, [projectData?.mindmap]);
+
+  // Handle saving (debounced)
+  useEffect(() => {
+    if (!onUpdate) return;
+    
+    const timeout = setTimeout(() => {
+        // Only update if data actually changed significantly (or just simple save)
+        onUpdate({
+            mindmap: { nodes, edges }
+        });
+    }, 2000); // 2 second debounce
+
+    return () => clearTimeout(timeout);
+  }, [nodes, edges, onUpdate]);
 
   // Sync nodes with global store for chat mentions
   useEffect(() => {

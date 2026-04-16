@@ -16,11 +16,11 @@ import { v4 as uuidv4 } from 'uuid';
 import AdvancedStepNode from './AdvancedStepNode';
 import useStore from '../../../store/useStore';
 
-function WorkflowContent({ projectId }) {
+function WorkflowContent({ projectId, projectData, onUpdate }) {
   const nodeTypes = useMemo(() => ({ step: AdvancedStepNode }), []);
   const { setProjectNodes } = useStore();
 
-  const [nodes, setNodes] = useState([
+  const [nodes, setNodes] = useState(projectData?.workflow?.nodes || [
     {
       id: 'step-1',
       type: 'step',
@@ -37,6 +37,27 @@ function WorkflowContent({ projectId }) {
     }
   ]);
 
+  const [edges, setEdges] = useState(projectData?.workflow?.edges || []);
+  
+  // Sync with projectData prop updates
+  useEffect(() => {
+    if (projectData?.workflow?.nodes) setNodes(projectData.workflow.nodes);
+    if (projectData?.workflow?.edges) setEdges(projectData.workflow.edges);
+  }, [projectData?.workflow]);
+
+  // Handle saving (debounced)
+  useEffect(() => {
+    if (!onUpdate) return;
+    
+    const timeout = setTimeout(() => {
+        onUpdate({
+            workflow: { nodes, edges }
+        });
+    }, 2000);
+
+    return () => clearTimeout(timeout);
+  }, [nodes, edges, onUpdate]);
+
   // Sync nodes with global store for chat mentions
   useEffect(() => {
     const mentionNodes = nodes.map(n => ({
@@ -47,8 +68,7 @@ function WorkflowContent({ projectId }) {
     setProjectNodes(mentionNodes);
   }, [nodes, setProjectNodes]);
 
-  const [edges, setEdges] = useState([]);
-  const [stepCount, setStepCount] = useState(1);
+  const [stepCount, setStepCount] = useState(projectData?.workflow?.nodes?.length || 1);
   const reactFlowWrapper = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
 

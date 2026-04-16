@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 
 const useStore = create((set) => ({
-    user: { email: 'mock@ims.com', role: 'MASTER_ADMIN', name: 'Master Admin' }, // Authenticated user (mocked for now to bypass login)
+    user: null, // Initialized via App.jsx listener
     isLoading: true, // App loading state
-    activeCompany: null, // Current active company ID
+    activeCompany: null, // Current active company object
     companies: [], // List of user's companies
 
     // Global Screen Sharing State
