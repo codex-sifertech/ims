@@ -20,7 +20,14 @@ Vercel is highly optimized for frontend projects and will automatically detect V
      - Build Command: `npm run build`
      - Output Directory: `dist`
      - Install Command: `npm install`
-   - **Environment Variables:** If your Firebase configuration uses `.env` variables (e.g., `VITE_FIREBASE_API_KEY`), expand the "Environment Variables" section and add them here.
+   - **Environment Variables:** Expand the "Environment Variables" section and add the following keys if you are overriding the default config:
+     - `VITE_FIREBASE_API_KEY`
+     - `VITE_FIREBASE_AUTH_DOMAIN`
+     - `VITE_FIREBASE_PROJECT_ID`
+     - `VITE_FIREBASE_STORAGE_BUCKET`
+     - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+     - `VITE_FIREBASE_APP_ID`
+     - `VITE_FIREBASE_MEASUREMENT_ID`
 4. **Deploy:** Click the **"Deploy"** button.
 5. **Done:** Vercel will build your app and give you a live URL within minutes.
 
@@ -41,7 +48,14 @@ Render is a robust alternative that supports static sites and full-stack web app
    - **Build Command:** `npm install && npm run build`
    - **Publish directory:** `dist`
 4. **Advanced Settings (Environment Variables):**
-   - Click "Advanced".
-   - If your Firebase config is hidden in `.env` files, click "Add Environment Variable" and add your keys (e.g., `VITE_FIREBASE_API_KEY`, etc.).
+   - Click "Advanced" and click "Add Environment Variable".
+   - Add the following keys if you are overriding the default config:
+     - `VITE_FIREBASE_API_KEY`
+     - `VITE_FIREBASE_AUTH_DOMAIN`
+     - `VITE_FIREBASE_PROJECT_ID`
+     - `VITE_FIREBASE_STORAGE_BUCKET`
+     - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+     - `VITE_FIREBASE_APP_ID`
+     - `VITE_FIREBASE_MEASUREMENT_ID`
 5. **Deploy:** Click **"Create Static Site"**.
 6. **Done:** Render will queue your build and provide a live URL once finished.
