@@ -98,7 +98,7 @@ export default function Inbox() {
         }
     };
 
-    const filteredProjects = projects.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredProjects = projects.filter(p => p.title?.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return (
         <div className="h-full flex overflow-hidden bg-dark-950">
@@ -106,7 +106,7 @@ export default function Inbox() {
             <div className="w-80 border-r border-dark-800 flex flex-col bg-dark-900/50 backdrop-blur-xl shrink-0">
                 <div className="p-6">
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-black text-white tracking-widest uppercase">Inbox</h2>
+                        <h2 className="text-xl font-black text-white tracking-widest uppercase">Chat</h2>
                         <button className="p-2 text-slate-500 hover:text-white transition-colors">
                             <Bell size={20} />
                         </button>
@@ -152,11 +152,11 @@ export default function Inbox() {
                                     filteredProjects.map(proj => (
                                         <button 
                                             key={proj.id}
-                                            onClick={() => setActiveChannel({ id: proj.id, name: proj.name, type: 'project' })}
+                                            onClick={() => setActiveChannel({ id: proj.id, name: proj.title, type: 'project' })}
                                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${activeChannel.id === proj.id ? 'bg-primary-600/20 text-primary-400 border border-primary-500/20' : 'text-slate-400 hover:bg-dark-800'}`}
                                         >
                                             <Hash size={16} className={activeChannel.id === proj.id ? 'text-primary-500' : 'text-slate-600 group-hover:text-slate-400'} />
-                                            <span className="text-sm font-medium flex-1 text-left truncate">{proj.name}</span>
+                                            <span className="text-sm font-medium flex-1 text-left truncate">{proj.title}</span>
                                             {proj.status === 'urgent' && <div className="w-4 h-4 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center text-[8px] font-black">!</div>}
                                         </button>
                                     ))

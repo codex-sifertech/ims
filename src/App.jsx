@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
 import useStore from './store/useStore';
 import { validateUserAccess } from './config/accessControl';
 
@@ -76,26 +76,43 @@ function App() {
         
         setUser(userData);
         
-        // Mock companies for now, but in reality these should come from Firestore
-        const mockCompanies = [
-          { id: 'personal', name: 'Personal Workspace' },
-          { id: 'alpha-corp', name: 'Alpha Corp' }
-        ];
-        setCompanies(mockCompanies);
+        // Fetch real companies from Firestore
+        const companiesRef = collection(db, 'companies');
+        const q = query(companiesRef, where('accessList', 'array-contains', firebaseUser.email));
+        const companySnaps = await getDocs(q);
+        
+        let fetchedCompanies = companySnaps.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        // Auto-create a Main Workspace if none exist (specifically for the admin)
+        if (fetchedCompanies.length === 0 && firebaseUser.email === 'sifertech.co@gmail.com') {
+          const newCompanyRef = doc(companiesRef); // Auto ID
+          const newCompanyData = {
+            name: 'Main Workspace',
+            createdAt: new Date().toISOString(),
+            accessList: [firebaseUser.email],
+            owner: firebaseUser.uid
+          };
+          await setDoc(newCompanyRef, newCompanyData);
+          fetchedCompanies = [{ id: newCompanyRef.id, ...newCompanyData }];
+        }
+
+        setCompanies(fetchedCompanies);
 
         // Try to keep selection if it was there
         const savedCompanyJson = localStorage.getItem('activeCompany');
-        if (savedCompanyJson) {
+        if (savedCompanyJson && fetchedCompanies.length > 0) {
           try {
             const saved = JSON.parse(savedCompanyJson);
-            // Verify the saved company exists in mockCompanies
-            const matched = mockCompanies.find(c => c.id === saved.id);
-            setActiveCompany(matched || mockCompanies[0]);
+            const matched = fetchedCompanies.find(c => c.id === saved.id);
+            setActiveCompany(matched || fetchedCompanies[0]);
           } catch (e) {
-            setActiveCompany(mockCompanies[0]);
+            setActiveCompany(fetchedCompanies[0]);
           }
-        } else {
-          setActiveCompany(mockCompanies[0]);
+        } else if (fetchedCompanies.length > 0) {
+          setActiveCompany(fetchedCompanies[0]);
         }
       } else {
         setUser(null);
