@@ -13,7 +13,8 @@ import MyBoard from './pages/MyBoard';
 import ProjectsBoard from './pages/ProjectsBoard';
 import ProjectDetails from './pages/ProjectDetails';
 import WorkBoard from './pages/WorkBoard';
-import GroupChat from './pages/GroupChat';
+import Inbox from './pages/Inbox';
+import GroupChat from './pages/GroupChat'; // Keep for now or remove if not needed
 import AIEcosystem from './pages/AIEcosystem';
 import Meetings from './pages/Meetings';
 import CompanySelection from './pages/CompanySelection';
@@ -83,9 +84,16 @@ function App() {
         setCompanies(mockCompanies);
 
         // Try to keep selection if it was there
-        const savedCompany = localStorage.getItem('activeCompany');
-        if (savedCompany) {
-          setActiveCompany(JSON.parse(savedCompany));
+        const savedCompanyJson = localStorage.getItem('activeCompany');
+        if (savedCompanyJson) {
+          try {
+            const saved = JSON.parse(savedCompanyJson);
+            // Verify the saved company exists in mockCompanies
+            const matched = mockCompanies.find(c => c.id === saved.id);
+            setActiveCompany(matched || mockCompanies[0]);
+          } catch (e) {
+            setActiveCompany(mockCompanies[0]);
+          }
         } else {
           setActiveCompany(mockCompanies[0]);
         }
@@ -115,7 +123,7 @@ function App() {
           <Route path="my-board" element={<MyBoard />} />
           <Route path="projects" element={<ProjectsBoard />} />
           <Route path="projects/:projectId" element={<ProjectDetails />} />
-          <Route path="chat" element={<GroupChat />} />
+          <Route path="chat" element={<Inbox />} />
           <Route path="ai" element={<AIEcosystem />} />
           <Route path="meetings" element={<Meetings />} />
           <Route path="settings" element={<CompanySettings />} />

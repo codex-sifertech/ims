@@ -39,6 +39,8 @@ export function useProjectTasks(projectId) {
             const tasksRef = collection(db, 'companies', activeCompany.id, 'projects', projectId, 'tasks');
             await addDoc(tasksRef, {
                 ...taskData,
+                companyId: activeCompany.id,
+                projectId,
                 createdBy: user.name || 'Unknown',
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
