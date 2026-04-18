@@ -89,6 +89,7 @@ function App() {
         // Auto-create a Main Workspace if none exist (specifically for the admin)
         if (fetchedCompanies.length === 0 && firebaseUser.email === 'sifertech.co@gmail.com') {
           const newCompanyRef = doc(companiesRef); // Auto ID
+          const newCompanyId = newCompanyRef.id;
           const newCompanyData = {
             name: 'Main Workspace',
             createdAt: new Date().toISOString(),
@@ -96,7 +97,31 @@ function App() {
             owner: firebaseUser.uid
           };
           await setDoc(newCompanyRef, newCompanyData);
-          fetchedCompanies = [{ id: newCompanyRef.id, ...newCompanyData }];
+          
+          // Also set the member document (CRITICAL for security rules)
+          const memberRef = doc(db, 'companies', newCompanyId, 'members', firebaseUser.uid);
+          await setDoc(memberRef, {
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || 'Admin',
+            role: 'admin',
+            joinedAt: new Date().toISOString()
+          });
+          
+          fetchedCompanies = [{ id: newCompanyId, ...newCompanyData }];
+        }
+
+        // Repair logic: Ensure user has a membership doc for all fetched companies
+        for (const company of fetchedCompanies) {
+          const memberRef = doc(db, 'companies', company.id, 'members', firebaseUser.uid);
+          const memberSnap = await getDoc(memberRef);
+          if (!memberSnap.exists()) {
+            await setDoc(memberRef, {
+              email: firebaseUser.email,
+              name: firebaseUser.displayName || 'Admin',
+              role: 'admin',
+              joinedAt: new Date().toISOString()
+            });
+          }
         }
 
         setCompanies(fetchedCompanies);
