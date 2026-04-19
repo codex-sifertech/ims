@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LogOut, Home, FolderKanban, Briefcase, MessageSquare, Sparkles, Video, Settings, ChevronDown } from 'lucide-react';
+import { LogOut, Home, FolderKanban, Briefcase, MessageSquare, Sparkles, Video, Settings, ChevronDown, Shield } from 'lucide-react';
 import { auth } from '../../firebase';
 import useStore from '../../store/useStore';
 import CompanySwitcher from './CompanySwitcher';
@@ -38,6 +38,7 @@ export default function DashboardLayout() {
         { name: 'AI Ecosystem', path: '/dashboard/ai', icon: <Sparkles size={20} /> },
         { name: 'Meetings', path: '/dashboard/meetings', icon: <Video size={20} /> },
         { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
+        ...(user?.role === 'master_admin' ? [{ name: 'Admin Panel', path: '/dashboard/admin', icon: <Shield size={20} />, danger: true }] : []),
     ];
 
     const isDashboardActive = location.pathname === '/dashboard';
@@ -108,8 +109,8 @@ export default function DashboardLayout() {
                                     to={item.path}
                                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                                         location.pathname === item.path
-                                        ? 'bg-primary-600/10 text-primary-400'
-                                        : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+                                        ? item.danger ? 'bg-rose-500/10 text-rose-400' : 'bg-primary-600/10 text-primary-400'
+                                        : item.danger ? 'text-rose-500/70 hover:bg-rose-500/10 hover:text-rose-400' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
                                     }`}
                                 >
                                     {item.icon}

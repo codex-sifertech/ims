@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTimeTracker } from '../hooks/useTimeTracker';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -17,7 +18,8 @@ import { format, subDays, startOfWeek, eachDayOfInterval } from 'date-fns';
 const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function AnalyticsDashboard() {
-    const { activeCompany, isCheckedIn, toggleCheckIn, globalTasks } = useStore();
+    const { activeCompany, globalTasks } = useStore();
+    const { isCheckedIn, toggleCheckIn } = useTimeTracker();
     const { projects, loading: projectsLoading } = useProjects();
     const [searchParams] = useSearchParams();
     

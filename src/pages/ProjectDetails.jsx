@@ -1,21 +1,9 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-    ArrowLeft, 
-    MonitorPlay, 
-    Users, 
-    Settings, 
-    Play, 
-    Network, 
-    ListTree, 
-    MessageSquare, 
-    ChevronLeft,
-    Clock,
-    Activity,
-    Calendar,
-    Sparkles,
-    Loader2,
-    AlertCircle
+import {
+    ArrowLeft, MonitorPlay, Settings, Network, ListTree,
+    MessageSquare, Sparkles, Loader2, AlertCircle,
+    FileText, BarChart2, CheckSquare, ChevronRight
 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { useProject } from '../hooks/useProject';
@@ -27,20 +15,22 @@ import ProjectCollaborationSidebar from '../components/projects/ProjectCollabora
 import ProjectInternalKanban from '../components/projects/ProjectInternalKanban';
 import ProjectOverview from '../components/projects/ProjectOverview';
 import ProjectSettings from '../components/projects/ProjectSettings';
+import ProjectDetails from '../components/projects/ProjectDetails';
 
-export default function ProjectDetails() {
+export default function ProjectDetailsPage() {
     const { projectId } = useParams();
     const navigate = useNavigate();
     const { project, loading, updateProjectData } = useProject(projectId);
-    const { tasks, loading: tasksLoading } = useProjectTasks(projectId);
-    const [activeTab, setActiveTab] = useState('overview');
+    const { tasks, loading: tasksLoading, addTask, updateTask, deleteTask } = useProjectTasks(projectId);
+    const [activeView, setActiveView] = useState('details'); // 'details' | 'analytics' | 'tasks' | 'tools'
+    const [activeTool, setActiveTool] = useState('screenshare'); // sub-view under 'tools'
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     if (loading) {
         return (
             <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-4 bg-dark-900">
                 <Loader2 className="animate-spin text-primary-500" size={40} />
-                <p className="text-lg font-medium">Syncing project data...</p>
+                <p className="text-lg font-medium">Loading project...</p>
             </div>
         );
     }
@@ -50,150 +40,166 @@ export default function ProjectDetails() {
             <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-4 bg-dark-900">
                 <AlertCircle size={48} className="text-red-500" />
                 <h2 className="text-2xl font-bold text-white">Project Not Found</h2>
-                <p>The project you are looking for does not exist or you don't have access.</p>
-                <button 
+                <p>This project does not exist or you don't have access.</p>
+                <button
                     onClick={() => navigate('/dashboard/projects')}
                     className="mt-4 px-6 py-2 bg-dark-800 hover:bg-dark-700 text-white rounded-xl transition-all border border-dark-700 font-medium"
                 >
-                    Back to Ecosystem
+                    ← Back to Projects
                 </button>
             </div>
         );
     }
 
+    const STATUS_STYLE = {
+        completed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+        ongoing:   'bg-amber-500/10 text-amber-400 border-amber-500/20',
+        upcoming:  'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+        'on-hold': 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    };
+
+    const mainTabs = [
+        { id: 'details',   label: 'Details',   icon: <FileText size={15} /> },
+        { id: 'analytics', label: 'Analytics', icon: <BarChart2 size={15} /> },
+        { id: 'tasks',     label: 'Tasks',     icon: <CheckSquare size={15} /> },
+        { id: 'tools',     label: 'Tools',     icon: <Network size={15} /> },
+    ];
+
+    const toolTabs = [
+        { id: 'screenshare', label: 'Screen Share', icon: <MonitorPlay size={14} /> },
+        { id: 'mindmap',     label: 'Mind Map',     icon: <Network size={14} /> },
+        { id: 'workflow',    label: 'Workflow',      icon: <ListTree size={14} /> },
+        { id: 'ai',          label: 'AI',            icon: <Sparkles size={14} /> },
+        { id: 'settings',    label: 'Settings',      icon: <Settings size={14} /> },
+    ];
+
     return (
         <div className="h-full flex flex-row bg-dark-900 overflow-hidden relative">
             <div className="flex-1 flex flex-col min-w-0">
-                {/* Header */}
-                <header className="px-6 py-4 border-b border-dark-700 flex items-center justify-between bg-dark-900/80 backdrop-blur shrink-0">
-                    <div className="flex items-center gap-4">
+                {/* ── Header ── */}
+                <header className="px-6 py-3 border-b border-dark-700 flex items-center justify-between bg-dark-900/90 backdrop-blur shrink-0 gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
                         <button
                             onClick={() => navigate('/dashboard/projects')}
-                            className="p-2 hover:bg-dark-700 rounded-full text-slate-400 hover:text-white transition-colors"
+                            className="p-2 hover:bg-dark-700 rounded-full text-slate-400 hover:text-white transition-colors shrink-0"
                         >
-                            <ArrowLeft size={20} />
+                            <ArrowLeft size={18} />
                         </button>
-                        <div>
+                        <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase border ${
-                                    project.status === 'completed' 
-                                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
-                                        : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                                }`}>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase border ${STATUS_STYLE[project.status] || STATUS_STYLE.ongoing}`}>
                                     {project.status || 'Ongoing'}
                                 </span>
-                                <span className="text-sm text-slate-500 font-mono">#{project.id.substring(0, 8)}</span>
+                                <span className="text-xs text-slate-600 font-mono">#{project.id.substring(0, 8)}</span>
                             </div>
-                            <h1 className="text-2xl font-bold text-white mt-1 leading-tight">{project.title}</h1>
+                            <h1 className="text-lg font-bold text-white mt-0.5 leading-tight truncate">{project.title}</h1>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-3 border border-dark-600 p-1 rounded-xl bg-dark-800">
-                            <button
-                                onClick={() => setActiveTab('overview')}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'overview' ? 'bg-dark-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                            >
-                                Overview
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('kanban')}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'kanban' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-slate-400 hover:text-slate-200'}`}
-                            >
-                                <ListTree size={14} /> Task Execution
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('screenshare')}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'screenshare' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-slate-400 hover:text-slate-200'}`}
-                            >
-                                <MonitorPlay size={14} /> Screen Share Live
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('mindmap')}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'mindmap' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-slate-400 hover:text-slate-200'}`}
-                            >
-                                <Network size={14} /> Mind Map
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('workflow')}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'workflow' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-slate-400 hover:text-slate-200'}`}
-                            >
-                                <ListTree size={14} /> Workflow
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('ai')}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'ai' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/20' : 'text-slate-400 hover:text-slate-200'}`}
-                            >
-                                <Sparkles size={14} /> AI
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('settings')}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'settings' ? 'bg-dark-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                            >
-                                <Settings size={14} />
-                            </button>
+                    <div className="flex items-center gap-3 shrink-0">
+                        {/* Main Tab Pills */}
+                        <div className="flex items-center bg-dark-800 border border-dark-700 rounded-xl p-1 gap-0.5">
+                            {mainTabs.map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveView(tab.id)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                        activeView === tab.id
+                                            ? 'bg-primary-600 text-white shadow-md'
+                                            : 'text-slate-400 hover:text-white hover:bg-dark-700'
+                                    }`}
+                                >
+                                    {tab.icon} {tab.label}
+                                </button>
+                            ))}
                         </div>
 
                         {!isSidebarOpen && (
-                            <button 
+                            <button
                                 onClick={() => setIsSidebarOpen(true)}
-                                className="h-10 px-4 rounded-xl bg-dark-800 border border-dark-600 text-slate-300 hover:text-white flex items-center gap-2 transition-all"
+                                className="h-9 px-3 rounded-xl bg-dark-800 border border-dark-600 text-slate-300 hover:text-white flex items-center gap-2 transition-all text-xs font-bold"
                             >
-                                <MessageSquare size={16} />
-                                <span className="text-xs font-bold uppercase tracking-wider">Collaboration</span>
+                                <MessageSquare size={14} /> Chat
                             </button>
                         )}
                     </div>
                 </header>
 
-                {/* Content Area */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                    {activeTab === 'overview' && (
-                        <ProjectOverview project={project} tasks={tasks} />
-                    )}
+                {/* ── Tool sub-tabs (only when 'tools' is active) ── */}
+                {activeView === 'tools' && (
+                    <div className="px-6 py-2 border-b border-dark-700/50 flex items-center gap-1 bg-dark-800/30 shrink-0">
+                        {toolTabs.map(t => (
+                            <button
+                                key={t.id}
+                                onClick={() => setActiveTool(t.id)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                    activeTool === t.id
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'text-slate-400 hover:text-white hover:bg-dark-700'
+                                }`}
+                            >
+                                {t.icon} {t.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
-                    {activeTab === 'kanban' && (
-                        <ProjectInternalKanban projectId={projectId} />
+                {/* ── Content ── */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    {activeView === 'details' && (
+                        <ProjectDetails project={project} onUpdate={updateProjectData} />
                     )}
-
-                    {activeTab === 'screenshare' && (
-                        <ScreenShareViewer projectId={projectId} />
+                    {activeView === 'analytics' && (
+                        <div className="p-6">
+                            <ProjectOverview project={project} tasks={tasks} />
+                        </div>
                     )}
-
-                    {activeTab === 'mindmap' && (
-                        <MindMapEditor projectId={projectId} projectData={project} onUpdate={updateProjectData} />
+                    {activeView === 'tasks' && (
+                        <div className="h-full p-6 flex flex-col">
+                            <ProjectInternalKanban projectId={projectId} />
+                        </div>
                     )}
-
-                    {activeTab === 'workflow' && (
-                        <WorkflowEditor projectId={projectId} projectData={project} onUpdate={updateProjectData} />
+                    {activeView === 'tools' && activeTool === 'screenshare' && (
+                        <div className="h-full">
+                            <ScreenShareViewer projectId={projectId} />
+                        </div>
                     )}
-
-                    {activeTab === 'ai' && (
-                        <div className="h-full flex items-center justify-center">
+                    {activeView === 'tools' && activeTool === 'mindmap' && (
+                        <div className="h-full">
+                            <MindMapEditor projectId={projectId} projectData={project} onUpdate={updateProjectData} />
+                        </div>
+                    )}
+                    {activeView === 'tools' && activeTool === 'workflow' && (
+                        <div className="h-full">
+                            <WorkflowEditor projectId={projectId} projectData={project} onUpdate={updateProjectData} />
+                        </div>
+                    )}
+                    {activeView === 'tools' && activeTool === 'ai' && (
+                        <div className="h-full flex items-center justify-center p-6">
                             <div className="bg-dark-800 border border-dark-700 rounded-2xl p-8 max-w-lg w-full text-center">
                                 <Sparkles className="text-primary-500 mx-auto mb-4" size={48} />
                                 <h2 className="text-2xl font-bold text-white mb-2">Project AI Assistant</h2>
-                                <p className="text-slate-400 mb-6">Analyze project tasks, optimize workflow, and get insights specific to this project.</p>
-                                <button className="px-6 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg font-medium transition-colors shadow-lg shadow-primary-500/20 w-full">
+                                <p className="text-slate-400 mb-6">Analyze tasks, optimize workflow, and get insights for this project.</p>
+                                <button className="px-6 py-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-primary-500/20 w-full">
                                     Start Analysis Session
                                 </button>
                             </div>
                         </div>
                     )}
-                    
-                    {activeTab === 'settings' && (
-                        <ProjectSettings project={project} onUpdate={updateProjectData} />
+                    {activeView === 'tools' && activeTool === 'settings' && (
+                        <div className="p-6">
+                            <ProjectSettings project={project} onUpdate={updateProjectData} />
+                        </div>
                     )}
                 </div>
             </div>
 
             {/* Collaboration Sidebar */}
-            <ProjectCollaborationSidebar 
-                projectId={projectId} 
-                isOpen={isSidebarOpen} 
-                onClose={() => setIsSidebarOpen(false)} 
+            <ProjectCollaborationSidebar
+                projectId={projectId}
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
             />
         </div>
     );
 }
-

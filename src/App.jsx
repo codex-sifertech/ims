@@ -18,6 +18,7 @@ import AIEcosystem from './pages/AIEcosystem';
 import Meetings from './pages/Meetings';
 import CompanySelection from './pages/CompanySelection';
 import CompanySettings from './pages/CompanySettings';
+import AdminPanel from './pages/AdminPanel';
 
 import Login from './components/auth/Login';
 
@@ -168,6 +169,7 @@ function App() {
           <Route path="ai" element={<AIEcosystem />} />
           <Route path="meetings" element={<Meetings />} />
           <Route path="settings" element={<CompanySettings />} />
+          <Route path="admin" element={<AdminPanel />} />
         </Route>
 
         {/* Catch-all redirect */}
