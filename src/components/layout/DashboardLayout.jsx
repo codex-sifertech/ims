@@ -18,10 +18,6 @@ export default function DashboardLayout() {
     useGlobalTasks();
     useTimeTracker();
 
-    const handleLogout = () => {
-        // Auth is currently disabled per user request
-        console.log("Logout clicked - auth currently bypassed");
-    };
 
     const navItems = [
         { 

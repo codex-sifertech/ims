@@ -6,7 +6,7 @@ import { Send, Hash, FileText, Image as ImageIcon, HelpCircle, Code, X, ChevronR
 import { format } from 'date-fns';
 
 export default function ProjectCollaborationSidebar({ projectId, isOpen, onClose }) {
-    const { user, projectNodes } = useStore();
+    const { user, projectNodes, activeCompany } = useStore();
     const [activeTab, setActiveTab] = useState('chat'); // 'chat', 'code', 'help'
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');

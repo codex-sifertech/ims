@@ -17,7 +17,6 @@ export const validateUserAccess = (email) => {
     const normalizedEmail = email.toLowerCase().trim();
     if (accessList[normalizedEmail]) {
         return {
-            uid: `uid_${Math.random().toString(36).substr(2, 9)}`,
             email: normalizedEmail,
             ...accessList[normalizedEmail]
         };

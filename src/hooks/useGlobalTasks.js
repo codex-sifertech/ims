@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import useStore from '../store/useStore';
 
 export function useGlobalTasks() {
-    const { activeCompany, setGlobalTasks } = useStore();
+    const { activeCompany, setGlobalTasks, globalTasks } = useStore();
 
     useEffect(() => {
         if (!activeCompany?.id) return;
@@ -19,6 +19,8 @@ export function useGlobalTasks() {
             where('companyId', '==', activeCompany.id)
         );
 
+        let fallbackUnsubscribe = null;
+
         const unsubscribe = onSnapshot(allTasksQuery, (snapshot) => {
             const tasks = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -31,13 +33,16 @@ export function useGlobalTasks() {
             console.error("Collection Group query failed (may need index):", error);
             
             // Fallback to just company tasks if index isn't ready
-            onSnapshot(companyTasksRef, (snap) => {
+            fallbackUnsubscribe = onSnapshot(companyTasksRef, (snap) => {
                 const tasks = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), _path: doc.ref.path }));
                 setGlobalTasks(tasks);
             });
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            if (fallbackUnsubscribe) fallbackUnsubscribe();
+        };
     }, [activeCompany?.id, setGlobalTasks]);
 
     const addTask = async (taskData) => {

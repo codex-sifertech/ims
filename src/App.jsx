@@ -14,7 +14,6 @@ import ProjectsBoard from './pages/ProjectsBoard';
 import ProjectDetails from './pages/ProjectDetails';
 import WorkBoard from './pages/WorkBoard';
 import Inbox from './pages/Inbox';
-import GroupChat from './pages/GroupChat'; // Keep for now or remove if not needed
 import AIEcosystem from './pages/AIEcosystem';
 import Meetings from './pages/Meetings';
 import CompanySelection from './pages/CompanySelection';
@@ -60,7 +59,7 @@ function App() {
         if (!accessCheck) {
           console.warn("Unauthorized access attempt:", firebaseUser.email);
           setUser(null);
-          auth.signOut();
+          await auth.signOut().catch(console.error);
           setLoading(false);
           return;
         }

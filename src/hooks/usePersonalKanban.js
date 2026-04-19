@@ -12,7 +12,7 @@ const DEFAULT_COLUMNS = [
 
 export function usePersonalKanban() {
     const { user, globalTasks } = useStore();
-    const { updateTask } = useGlobalTasks();
+    const { addTask, updateTask } = useGlobalTasks();
     const [columns, setColumns] = useState([]);
     const [loading, setLoading] = useState(true);
 

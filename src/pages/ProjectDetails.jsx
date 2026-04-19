@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { useProject } from '../hooks/useProject';
+import { useProjectTasks } from '../hooks/useProjectTasks';
 import ScreenShareViewer from '../components/projects/ScreenShareViewer';
 import MindMapEditor from '../components/projects/mindmap/MindMapEditor';
 import WorkflowEditor from '../components/projects/workflow/WorkflowEditor';
