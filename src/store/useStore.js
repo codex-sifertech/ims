@@ -22,7 +22,14 @@ const useStore = create((set) => ({
     // Actions
     setUser: (user) => set({ user, isLoading: false }),
     setLoading: (isLoading) => set({ isLoading }),
-    setActiveCompany: (company) => set({ activeCompany: company }),
+    setActiveCompany: (company) => {
+        if (company) {
+            localStorage.setItem('activeCompany', JSON.stringify(company));
+        } else {
+            localStorage.removeItem('activeCompany');
+        }
+        set({ activeCompany: company });
+    },
     setCompanies: (companies) => set({ companies }),
     setProjectNodes: (nodes) => set({ projectNodes: nodes }),
     

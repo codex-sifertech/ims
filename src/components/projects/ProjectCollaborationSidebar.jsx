@@ -26,7 +26,7 @@ export default function ProjectCollaborationSidebar({ projectId, isOpen, onClose
     useEffect(() => {
         if (!projectId || !user?.uid) return;
 
-        const messagesRef = collection(db, 'projects', projectId, 'chat');
+        const messagesRef = collection(db, 'companies', activeCompany.id, 'projects', projectId, 'chat');
         const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(50));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -51,7 +51,7 @@ export default function ProjectCollaborationSidebar({ projectId, isOpen, onClose
         if (!textToSend) setNewMessage('');
 
         try {
-            const messagesRef = collection(db, 'projects', projectId, 'chat');
+            const messagesRef = collection(db, 'companies', activeCompany.id, 'projects', projectId, 'chat');
             await addDoc(messagesRef, {
                 text,
                 senderId: user.uid,

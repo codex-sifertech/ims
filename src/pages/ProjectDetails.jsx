@@ -31,6 +31,7 @@ export default function ProjectDetails() {
     const { projectId } = useParams();
     const navigate = useNavigate();
     const { project, loading, updateProjectData } = useProject(projectId);
+    const { tasks, loading: tasksLoading } = useProjectTasks(projectId);
     const [activeTab, setActiveTab] = useState('overview');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -147,7 +148,7 @@ export default function ProjectDetails() {
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
                     {activeTab === 'overview' && (
-                        <ProjectOverview project={project} />
+                        <ProjectOverview project={project} tasks={tasks} />
                     )}
 
                     {activeTab === 'kanban' && (

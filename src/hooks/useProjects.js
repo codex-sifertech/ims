@@ -33,14 +33,22 @@ export function useProjects() {
     }, [user, activeCompany]);
 
     const createProject = async (projectData) => {
-        if (!user?.uid || !activeCompany?.id) return null;
+        if (!user?.uid) {
+            console.error("Project creation failed: No user found");
+            return null;
+        }
+        if (!activeCompany?.id) {
+            console.error("Project creation failed: No active company found");
+            return null;
+        }
 
         try {
+            console.log("Creating project under company:", activeCompany.id);
             const projectsRef = collection(db, 'companies', activeCompany.id, 'projects');
             const docRef = await addDoc(projectsRef, {
                 ...projectData,
-                createdBy: user.name || 'Unknown',
-                creatorUid: user.uid,
+                createdBy: user.uid,
+                createdByName: user.name || user.email,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 status: projectData.status || 'ongoing',

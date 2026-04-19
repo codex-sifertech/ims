@@ -38,7 +38,7 @@ export default function DashboardLayout() {
         },
         { name: 'My Board', path: '/dashboard/my-board', icon: <FolderKanban size={20} /> },
         { name: 'Projects', path: '/dashboard/projects', icon: <Briefcase size={20} /> },
-        { name: 'Group Chat', path: '/dashboard/chat', icon: <MessageSquare size={20} /> },
+        { name: 'Chat', path: '/dashboard/chat', icon: <MessageSquare size={20} /> },
         { name: 'AI Ecosystem', path: '/dashboard/ai', icon: <Sparkles size={20} /> },
         { name: 'Meetings', path: '/dashboard/meetings', icon: <Video size={20} /> },
         { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
@@ -138,7 +138,7 @@ export default function DashboardLayout() {
                         </div>
                     </div>
                     <button
-                        onClick={handleLogout}
+                        onClick={() => auth.signOut()}
                         className="mt-4 flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
                     >
                         <LogOut size={20} />

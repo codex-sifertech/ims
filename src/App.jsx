@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
 import useStore from './store/useStore';
 import { validateUserAccess } from './config/accessControl';
 
@@ -13,7 +13,8 @@ import MyBoard from './pages/MyBoard';
 import ProjectsBoard from './pages/ProjectsBoard';
 import ProjectDetails from './pages/ProjectDetails';
 import WorkBoard from './pages/WorkBoard';
-import GroupChat from './pages/GroupChat';
+import Inbox from './pages/Inbox';
+import GroupChat from './pages/GroupChat'; // Keep for now or remove if not needed
 import AIEcosystem from './pages/AIEcosystem';
 import Meetings from './pages/Meetings';
 import CompanySelection from './pages/CompanySelection';
@@ -75,19 +76,68 @@ function App() {
         
         setUser(userData);
         
-        // Mock companies for now, but in reality these should come from Firestore
-        const mockCompanies = [
-          { id: 'personal', name: 'Personal Workspace' },
-          { id: 'alpha-corp', name: 'Alpha Corp' }
-        ];
-        setCompanies(mockCompanies);
+        // Fetch real companies from Firestore
+        const companiesRef = collection(db, 'companies');
+        const q = query(companiesRef, where('accessList', 'array-contains', firebaseUser.email));
+        const companySnaps = await getDocs(q);
+        
+        let fetchedCompanies = companySnaps.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        // Auto-create a Main Workspace if none exist (specifically for the admin)
+        if (fetchedCompanies.length === 0 && firebaseUser.email === 'sifertech.co@gmail.com') {
+          const newCompanyRef = doc(companiesRef); // Auto ID
+          const newCompanyId = newCompanyRef.id;
+          const newCompanyData = {
+            name: 'Main Workspace',
+            createdAt: new Date().toISOString(),
+            accessList: [firebaseUser.email],
+            owner: firebaseUser.uid
+          };
+          await setDoc(newCompanyRef, newCompanyData);
+          
+          // Also set the member document (CRITICAL for security rules)
+          const memberRef = doc(db, 'companies', newCompanyId, 'members', firebaseUser.uid);
+          await setDoc(memberRef, {
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || 'Admin',
+            role: 'admin',
+            joinedAt: new Date().toISOString()
+          });
+          
+          fetchedCompanies = [{ id: newCompanyId, ...newCompanyData }];
+        }
+
+        // Repair logic: Ensure user has a membership doc for all fetched companies
+        for (const company of fetchedCompanies) {
+          const memberRef = doc(db, 'companies', company.id, 'members', firebaseUser.uid);
+          const memberSnap = await getDoc(memberRef);
+          if (!memberSnap.exists()) {
+            await setDoc(memberRef, {
+              email: firebaseUser.email,
+              name: firebaseUser.displayName || 'Admin',
+              role: 'admin',
+              joinedAt: new Date().toISOString()
+            });
+          }
+        }
+
+        setCompanies(fetchedCompanies);
 
         // Try to keep selection if it was there
-        const savedCompany = localStorage.getItem('activeCompany');
-        if (savedCompany) {
-          setActiveCompany(JSON.parse(savedCompany));
-        } else {
-          setActiveCompany(mockCompanies[0]);
+        const savedCompanyJson = localStorage.getItem('activeCompany');
+        if (savedCompanyJson && fetchedCompanies.length > 0) {
+          try {
+            const saved = JSON.parse(savedCompanyJson);
+            const matched = fetchedCompanies.find(c => c.id === saved.id);
+            setActiveCompany(matched || fetchedCompanies[0]);
+          } catch (e) {
+            setActiveCompany(fetchedCompanies[0]);
+          }
+        } else if (fetchedCompanies.length > 0) {
+          setActiveCompany(fetchedCompanies[0]);
         }
       } else {
         setUser(null);
@@ -115,7 +165,7 @@ function App() {
           <Route path="my-board" element={<MyBoard />} />
           <Route path="projects" element={<ProjectsBoard />} />
           <Route path="projects/:projectId" element={<ProjectDetails />} />
-          <Route path="chat" element={<GroupChat />} />
+          <Route path="chat" element={<Inbox />} />
           <Route path="ai" element={<AIEcosystem />} />
           <Route path="meetings" element={<Meetings />} />
           <Route path="settings" element={<CompanySettings />} />
