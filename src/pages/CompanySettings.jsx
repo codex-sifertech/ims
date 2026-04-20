@@ -55,15 +55,21 @@ export default function CompanySettings() {
 
             const companyRef = doc(db, 'companies', activeCompany.id);
             const currentAccessList = activeCompany.accessList || [];
-            if (!currentAccessList.includes(inviteEmail.trim())) {
-                const newAccessList = [...currentAccessList, inviteEmail.trim().toLowerCase()];
+            
+            // Generate raw and absolute casing for total Firebase token compatibility
+            const rawEmail = inviteEmail.trim();
+            const lowerEmail = rawEmail.toLowerCase();
+            
+            const newAccessList = [...new Set([...currentAccessList, rawEmail, lowerEmail])];
+            
+            if (newAccessList.length !== currentAccessList.length) {
                 await updateDoc(companyRef, { accessList: newAccessList });
             }
 
             const stubId = `invite_${Date.now()}`;
             const memberRef = doc(db, 'companies', activeCompany.id, 'members', stubId);
             await setDoc(memberRef, {
-                email: inviteEmail.trim().toLowerCase(),
+                email: rawEmail,
                 name: 'Pending User',
                 role: inviteRole,
                 status: 'pending',

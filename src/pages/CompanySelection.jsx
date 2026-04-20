@@ -42,7 +42,8 @@ export default function CompanySelection() {
             const newCompanyData = {
                 name: newCompanyName.trim(),
                 createdAt: new Date().toISOString(),
-                accessList: [user.email.toLowerCase()],
+                // Push EXACT token casing, plus lowercase backup just in case of future cross-platform invites
+                accessList: [...new Set([user.email, user.email.toLowerCase()])],
                 owner: user.uid,
             };
             
@@ -52,7 +53,7 @@ export default function CompanySelection() {
             // 2. Create the member doc. It will now successfully verify against the live company doc.
             const memberRef = doc(db, 'companies', newCompanyRef.id, 'members', user.uid);
             await setDoc(memberRef, {
-                email: user.email.toLowerCase(),
+                email: user.email, // Exact token
                 name: user.name || user.displayName || 'Creator',
                 role: 'admin',
                 joinedAt: new Date().toISOString(),

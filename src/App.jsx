@@ -76,7 +76,8 @@ function App() {
         
         // Fetch real companies from Firestore
         const companiesRef = collection(db, 'companies');
-        const q = query(companiesRef, where('accessList', 'array-contains', firebaseUser.email.toLowerCase()));
+        // Firebase strictly requires the query to identically match the rule `request.auth.token.email in accessList`!
+        const q = query(companiesRef, where('accessList', 'array-contains', firebaseUser.email));
         const companySnaps = await getDocs(q);
         
         let fetchedCompanies = companySnaps.docs.map(doc => ({
