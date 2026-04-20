@@ -45,17 +45,17 @@ const PROJECT_COLORS = [
     { border: 'border-l-emerald-500', title: 'group-hover:text-emerald-400' },
 ];
 
-const getProjectColorConfig = (id) => {
-    if (!id) return PROJECT_COLORS[0];
-    const strId = String(id);
+const getProjectColorConfig = (title) => {
+    if (!title) return PROJECT_COLORS[0];
+    const str = String(title).trim().toLowerCase();
     let hash = 0;
-    for (let i = 0; i < strId.length; i++) hash = strId.charCodeAt(i) + ((hash << 5) - hash);
+    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
     return PROJECT_COLORS[Math.abs(hash) % PROJECT_COLORS.length];
 };
 
 function ProjectCard({ project, onClick }) {
     const cfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ongoing;
-    const colorCfg = getProjectColorConfig(project.id);
+    const colorCfg = getProjectColorConfig(project.title);
     
     return (
         <motion.div

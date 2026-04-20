@@ -30,19 +30,18 @@ export default function GlobalTaskBoard() {
     const [newCardAssignee, setNewCardAssignee] = useState('');
     const [newCardTags, setNewCardTags] = useState('');
 
-    const getProjectColorClass = (id) => {
-        if (!id) return PROJECT_COLORS[0];
-        const strId = String(id);
+    const getProjectColorClass = (title) => {
+        if (!title) return PROJECT_COLORS[0];
+        const str = String(title).trim().toLowerCase();
         let hash = 0;
-        for (let i = 0; i < strId.length; i++) hash = strId.charCodeAt(i) + ((hash << 5) - hash);
+        for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
         return PROJECT_COLORS[Math.abs(hash) % PROJECT_COLORS.length];
     };
 
     const getProjectLabel = (task) => {
-        if (!task.projectId && !task.projectTitle) return null;
-        const label = task.projectTitle || `Project ${task.projectId?.substring(0, 4)}`;
-        const colorClass = getProjectColorClass(task.projectId);
-        return { label, colorClass };
+        if (!task.projectTitle) return null;
+        const colorClass = getProjectColorClass(task.projectTitle);
+        return { label: task.projectTitle, colorClass };
     };
 
     const onDragEnd = async (result) => {
@@ -181,7 +180,6 @@ export default function GlobalTaskBoard() {
                                                                 <span className="text-[9px] text-slate-600 font-bold tracking-wider">
                                                                     {card.assignedTo || card.createdBy || 'UNASSIGNED'}
                                                                 </span>
-                                                                <span className="text-[9px] text-slate-700 font-mono">#{card.id.substring(0, 4)}</span>
                                                             </div>
                                                         </div>
                                                     )}
