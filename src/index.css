@@ -18,6 +18,21 @@
   color-scheme: dark;
 }
 
+/* Day Mode / Light Mode Override */
+body.theme-light {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+body.theme-light img,
+body.theme-light video,
+body.theme-light [data-no-invert="true"] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+body.theme-light input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0) opacity(0.6);
+}
+
 html, body {
   margin: 0;
   padding: 0;

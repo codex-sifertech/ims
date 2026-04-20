@@ -49,8 +49,17 @@ function MainRoute() {
 }
 
 function App() {
-  const { setLoading, setCompanies, setUser, setActiveCompany, activeCompany, user } = useStore();
+  const { setLoading, setCompanies, setUser, setActiveCompany, activeCompany, user, theme, setTheme } = useStore();
   
+  useEffect(() => {
+    // Initialize Theme on Mount
+    if (theme === 'light') {
+        document.body.classList.add('theme-light');
+    } else {
+        document.body.classList.remove('theme-light');
+    }
+  }, [theme]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 import { Settings, Shield, User, UserPlus, CheckCircle2, Loader2, Trash2, Mail, Users, Calendar } from 'lucide-react';
@@ -38,8 +38,14 @@ export default function CompanySettings() {
 
         let unsubscribeLogs = () => {};
         if (activeCompany.owner === user?.uid && dateFilter) {
-            const logsRef = collection(db, 'companies', activeCompany.id, 'attendance', dateFilter, 'logs');
-            const q = query(logsRef, orderBy('timestamp', 'desc'));
+            const logsRef = collection(db, 'companies', activeCompany.id, 'attendanceLogs');
+            let q;
+            if (dateFilter === 'ALL') {
+                q = query(logsRef, orderBy('timestamp', 'desc'));
+            } else {
+                q = query(logsRef, where('dateGroup', '==', dateFilter), orderBy('timestamp', 'desc'));
+            }
+            
             unsubscribeLogs = onSnapshot(q, (snap) => {
                 setTimeLogs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             });

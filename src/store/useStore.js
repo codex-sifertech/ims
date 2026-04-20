@@ -19,7 +19,19 @@ const useStore = create((set) => ({
     globalTasks: [], 
     tasksLoading: true,
 
+    // Theme State
+    theme: localStorage.getItem('ims_theme') || 'dark',
+
     // Actions
+    setTheme: (theme) => {
+        localStorage.setItem('ims_theme', theme);
+        if (theme === 'light') {
+            document.body.classList.add('theme-light');
+        } else {
+            document.body.classList.remove('theme-light');
+        }
+        set({ theme });
+    },
     setUser: (user) => set({ user, isLoading: false }),
     setLoading: (isLoading) => set({ isLoading }),
     setActiveCompany: (company) => {

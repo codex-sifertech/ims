@@ -15,12 +15,12 @@ const COLUMNS = [
 
 // Pick a consistent colour for each project label
 const PROJECT_COLORS = [
-    'bg-primary-500/10 text-primary-400 border-primary-500/20',
-    'bg-violet-500/10 text-violet-400 border-violet-500/20',
-    'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-    'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    'bg-rose-500/10 text-rose-400 border-rose-500/20',
-    'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    'bg-[#FF007F]/10 text-[#FF007F] border-[#FF007F]/20',
+    'bg-[#00FF00]/10 text-[#00FF00] border-[#00FF00]/20',
+    'bg-[#00E5FF]/10 text-[#00E5FF] border-[#00E5FF]/20',
+    'bg-[#FFEA00]/10 text-[#FFEA00] border-[#FFEA00]/20',
+    'bg-[#B500FF]/10 text-[#B500FF] border-[#B500FF]/20',
+    'bg-[#FF5500]/10 text-[#FF5500] border-[#FF5500]/20',
 ];
 
 export default function GlobalTaskBoard() {

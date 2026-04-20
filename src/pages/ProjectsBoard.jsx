@@ -37,12 +37,12 @@ function LabelBadge({ label }) {
 }
 
 const PROJECT_COLORS = [
-    { border: 'border-l-primary-500', title: 'group-hover:text-primary-400' },
-    { border: 'border-l-violet-500',  title: 'group-hover:text-violet-400' },
-    { border: 'border-l-cyan-500',    title: 'group-hover:text-cyan-400' },
-    { border: 'border-l-amber-500',   title: 'group-hover:text-amber-400' },
-    { border: 'border-l-rose-500',    title: 'group-hover:text-rose-400' },
-    { border: 'border-l-emerald-500', title: 'group-hover:text-emerald-400' },
+    { border: 'border-l-[#FF007F]', title: 'group-hover:text-[#FF007F]' }, // Neon Pink
+    { border: 'border-l-[#00FF00]', title: 'group-hover:text-[#00FF00]' }, // Lime
+    { border: 'border-l-[#00E5FF]', title: 'group-hover:text-[#00E5FF]' }, // Cyan
+    { border: 'border-l-[#FFEA00]', title: 'group-hover:text-[#FFEA00]' }, // Yellow
+    { border: 'border-l-[#B500FF]', title: 'group-hover:text-[#B500FF]' }, // Purple
+    { border: 'border-l-[#FF5500]', title: 'group-hover:text-[#FF5500]' }, // Orange
 ];
 
 const getProjectColorConfig = (title) => {
