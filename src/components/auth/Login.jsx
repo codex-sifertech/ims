@@ -18,7 +18,12 @@ export default function Login() {
 
         const userData = validateUserAccess(email);
         if (userData) {
-            setUser(userData);
+            // Provide a reliable fallback UID since this mock login doesn't use Firebase Auth
+            const userWithUid = {
+                ...userData,
+                uid: userData.uid || `user-${btoa(email).substring(0, 10)}`
+            };
+            setUser(userWithUid);
             navigate('/');
         } else {
             setError('Access Denied: Email not found in the authorized access list.');
