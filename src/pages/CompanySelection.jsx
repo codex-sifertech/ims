@@ -124,10 +124,10 @@ export default function CompanySelection() {
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-600/30 to-indigo-600/20 flex items-center justify-center text-white font-bold text-sm border border-primary-500/20 group-hover:border-primary-500/50 transition-colors">
-                                                {company.name.charAt(0).toUpperCase()}
+                                                {(company?.name?.charAt(0) || '?').toUpperCase()}
                                             </div>
                                             <div>
-                                                <span className="text-white font-semibold text-sm">{company.name}</span>
+                                                <span className="text-white font-semibold text-sm">{company?.name || 'Untitled Workspace'}</span>
                                                 {company.owner === user?.uid && (
                                                     <span className="block text-[10px] text-primary-400 font-medium">Owner</span>
                                                 )}

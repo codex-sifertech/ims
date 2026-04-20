@@ -67,11 +67,13 @@ export default function CompanySwitcher() {
                                         className="w-full flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-dark-700 transition-colors text-left group"
                                     >
                                         <div className="flex items-center gap-2.5 min-w-0">
-                                            <div className="w-7 h-7 rounded-lg bg-dark-600 border border-dark-500 flex items-center justify-center text-white text-xs font-bold shrink-0 group-hover:border-primary-500/40 transition-colors">
-                                                {company.name.charAt(0).toUpperCase()}
+                                            <div className="w-8 h-8 rounded-lg bg-primary-600/20 text-primary-400 flex items-center justify-center font-bold text-xs shrink-0 group-hover:bg-primary-500 group-hover:text-white transition-colors">
+                                                {(company?.name?.charAt(0) || '?').toUpperCase()}
                                             </div>
                                             <div className="min-w-0">
-                                                <p className="text-white text-sm font-medium truncate">{company.name}</p>
+                                                <p className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors truncate">
+                                                    {company?.name || 'Untitled Workspace'}
+                                                </p>
                                                 {company.owner === user?.uid && (
                                                     <p className="text-[9px] text-primary-400 font-semibold uppercase tracking-wide">Owner</p>
                                                 )}
