@@ -14,10 +14,17 @@ export function useGlobalTasks() {
 
         const unsubscribes = [];
         let allTasks = new Map(); // Store tasks by their unique _path
+        let projectsMeta = new Map(); // Store projectId -> projectTitle
 
         // Helper to merge and update global state
         const updateState = () => {
-            setGlobalTasks(Array.from(allTasks.values()));
+            setGlobalTasks(Array.from(allTasks.values()).map(task => {
+                // Embellish every task with the correct title if we know it!
+                if (task.projectId && projectsMeta.has(task.projectId)) {
+                    return { ...task, projectTitle: projectsMeta.get(task.projectId) };
+                }
+                return task;
+            }));
         };
 
         // 1. Listen to Company-level tasks
@@ -46,6 +53,7 @@ export function useGlobalTasks() {
                 if (change.type === 'added' || change.type === 'modified') {
                     // Extract the project title so the UI can show human-readable names
                     const projectTitle = change.doc.data().title || change.doc.data().name || `Project ${projectId.substring(0,4)}`;
+                    projectsMeta.set(projectId, projectTitle); // Save for cross-referencing
 
                     // Only sub if we haven't already
                     if (!projectTaskUnsubs.has(projectId)) {
@@ -56,8 +64,7 @@ export function useGlobalTasks() {
                                     id: doc.id, 
                                     ...doc.data(), 
                                     _path: doc.ref.path, 
-                                    projectId,
-                                    projectTitle // Embedded dynamically!
+                                    projectId
                                 });
                             });
                             pSnap.docChanges().forEach(c => {
@@ -69,12 +76,7 @@ export function useGlobalTasks() {
                         projectTaskUnsubs.set(projectId, unsubP);
                         unsubscribes.push(unsubP);
                     } else {
-                        // If project title changed, update existing tasks in memory mapped to this project
-                        for (const [path, task] of allTasks.entries()) {
-                            if (task.projectId === projectId) {
-                                allTasks.set(path, { ...task, projectTitle });
-                            }
-                        }
+                        // Title might have updated, trigger re-render
                         updateState();
                     }
                 }
