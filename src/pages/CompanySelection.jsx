@@ -51,8 +51,8 @@ export default function CompanySelection() {
             const memberRef = doc(db, 'companies', newCompanyRef.id, 'members', user.uid);
             batch.set(memberRef, {
                 email: user.email.toLowerCase(),
-                name: user.name || user.displayName || 'Owner',
-                role: 'owner',
+                name: user.name || user.displayName || 'Creator',
+                role: 'admin',
                 joinedAt: new Date().toISOString(),
             });
 

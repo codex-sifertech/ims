@@ -42,6 +42,17 @@ export default function CompanySettings() {
         setInviteError('');
 
         try {
+            // [HOTFIX] Ensure backwards compatibility with old Firebase string enums. 
+            // Creators must be strictly 'admin' in Firestore members doc to bypass Vercel/Firebase rule gap.
+            if (activeCompany.owner === user?.uid) {
+                const myMemberData = members.find(m => m.id === user.uid);
+                if (myMemberData && myMemberData.role !== 'admin') {
+                    await updateDoc(doc(db, 'companies', activeCompany.id, 'members', user.uid), {
+                        role: 'admin'
+                    });
+                }
+            }
+
             const companyRef = doc(db, 'companies', activeCompany.id);
             const currentAccessList = activeCompany.accessList || [];
             if (!currentAccessList.includes(inviteEmail.trim())) {
@@ -236,7 +247,7 @@ export default function CompanySettings() {
                             <div className="space-y-2 p-4">
                                 {members.map((member) => {
                                     const isYou = member.id === user?.uid || member.email === user?.email;
-                                    const isOwner = member.role === 'owner';
+                                    const isOwner = member.role === 'owner' || activeCompany?.owner === member.id;
                                     
                                     return (
                                         <div key={member.id} className="bg-dark-900/60 border border-dark-700/60 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-dark-600 transition-colors">
