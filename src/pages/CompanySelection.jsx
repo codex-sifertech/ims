@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { collection, doc, setDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 import { Building2, Plus, ArrowRight, Loader2, ChevronRight, X } from 'lucide-react';
@@ -36,28 +36,35 @@ export default function CompanySelection() {
         setCreateError('');
         setIsSaving(true);
         try {
+            const batch = writeBatch(db);
             const newCompanyRef = doc(collection(db, 'companies'));
+            
             const newCompanyData = {
                 name: newCompanyName.trim(),
                 createdAt: new Date().toISOString(),
-                accessList: [user.email],
+                accessList: [user.email.toLowerCase()],
                 owner: user.uid,
             };
-            await setDoc(newCompanyRef, newCompanyData);
+            
+            batch.set(newCompanyRef, newCompanyData);
+            
             const memberRef = doc(db, 'companies', newCompanyRef.id, 'members', user.uid);
-            await setDoc(memberRef, {
-                email: user.email,
+            batch.set(memberRef, {
+                email: user.email.toLowerCase(),
                 name: user.name || user.displayName || 'Owner',
                 role: 'owner',
                 joinedAt: new Date().toISOString(),
             });
+
+            await batch.commit();
+
             const newCompany = { id: newCompanyRef.id, ...newCompanyData };
             setCompanies([...companies, newCompany]);
             setActiveCompany(newCompany);
             navigate('/dashboard');
         } catch (error) {
             console.error('Error saving workspace:', error);
-            setCreateError('Failed to create workspace. Please try again.');
+            setCreateError(error.message || 'Failed to create workspace. Please try again.');
         } finally {
             setIsSaving(false);
         }
