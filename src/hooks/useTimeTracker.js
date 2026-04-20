@@ -39,16 +39,16 @@ export function useTimeTracker() {
             await setDoc(settingsRef, { isCheckedIn: newStatus }, { merge: true });
 
             // Log the attendance event
+            const today = new Date().toISOString().split('T')[0];
             const logsRef = collection(
-                db, 'companies', activeCompany.id, 'attendanceLogs'
+                db, 'companies', activeCompany.id, 'attendance', today, 'logs'
             );
 
             await addDoc(logsRef, {
                 userId: user.uid,
                 userName: user.name || user.email,
                 type: newStatus ? 'check-in' : 'check-out',
-                timestamp: serverTimestamp(),
-                dateGroup: new Date().toISOString().split('T')[0] // keep day string for filtering if needed
+                timestamp: serverTimestamp()
             });
         } catch (error) {
             console.error('Error toggling check-in:', error);

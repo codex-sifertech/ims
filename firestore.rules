@@ -114,6 +114,14 @@ service cloud.firestore {
         }
       }
 
+      // Root flattened Attendance Logs
+      match /attendanceLogs/{logId} {
+        allow read: if isCompanyMember(companyId);
+        allow create: if isCompanyMember(companyId) &&
+                         request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isCompanyAdmin(companyId);
+      }
+
       // Group chat messages (company-scoped)
       match /messages/{messageId} {
         allow read: if isCompanyMember(companyId);
