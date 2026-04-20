@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, orderBy, where } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 import { Settings, Shield, User, UserPlus, CheckCircle2, Loader2, Trash2, Mail, Users, Calendar } from 'lucide-react';
@@ -334,7 +334,7 @@ export default function CompanySettings() {
                                                         member.status === 'pending' ? 'bg-slate-500/10 border-slate-500/20 text-slate-400 border-dashed' :
                                                         'bg-primary-500/10 border-primary-500/20 text-primary-400'
                                                     }`}>
-                                                        {member.name?.charAt(0).toUpperCase()}
+                                                        {(member.name?.charAt(0) || member.email?.charAt(0) || '?').toUpperCase()}
                                                     </div>
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-white flex items-center gap-2 truncate text-sm">
@@ -428,7 +428,7 @@ export default function CompanySettings() {
                                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                                                         log.type === 'check-in' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                                                     }`}>
-                                                        {log.userName?.charAt(0).toUpperCase()}
+                                                        {(log.userName?.charAt(0) || '?').toUpperCase()}
                                                     </div>
                                                     <div>
                                                         <p className="text-sm font-bold text-white">{log.userName}</p>
