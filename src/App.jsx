@@ -76,7 +76,7 @@ function App() {
         
         // Fetch real companies from Firestore
         const companiesRef = collection(db, 'companies');
-        const q = query(companiesRef, where('accessList', 'array-contains', firebaseUser.email));
+        const q = query(companiesRef, where('accessList', 'array-contains', firebaseUser.email.toLowerCase()));
         const companySnaps = await getDocs(q);
         
         let fetchedCompanies = companySnaps.docs.map(doc => ({
@@ -130,6 +130,7 @@ function App() {
       } else {
         setUser(null);
         setActiveCompany(null);
+        setCompanies([]);
         localStorage.removeItem('activeCompany');
       }
       setLoading(false);
