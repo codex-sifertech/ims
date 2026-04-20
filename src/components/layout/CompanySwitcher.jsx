@@ -88,7 +88,11 @@ export default function CompanySwitcher() {
                         {/* Footer: Manage workspaces */}
                         <div className="border-t border-dark-700 p-1.5">
                             <button
-                                onClick={() => { setOpen(false); navigate('/'); }}
+                                onClick={() => { 
+                                    setOpen(false); 
+                                    setActiveCompany(null);
+                                    navigate('/'); 
+                                }}
                                 className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-700 transition-colors text-xs font-medium"
                             >
                                 <Plus size={12} />

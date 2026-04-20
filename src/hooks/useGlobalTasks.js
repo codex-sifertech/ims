@@ -7,7 +7,10 @@ export function useGlobalTasks() {
     const { activeCompany, setGlobalTasks, globalTasks } = useStore();
 
     useEffect(() => {
-        if (!activeCompany?.id) return;
+        if (!activeCompany?.id) {
+            setGlobalTasks([]); // Will set loading false
+            return;
+        }
 
         // Fetch company-level tasks
         const companyTasksRef = collection(db, 'companies', activeCompany.id, 'tasks');
@@ -25,17 +28,19 @@ export function useGlobalTasks() {
             const tasks = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data(),
-                // Store the full path for easier updates later
                 _path: doc.ref.path
             }));
             setGlobalTasks(tasks);
         }, (error) => {
-            console.error("Collection Group query failed (may need index):", error);
+            console.error("Collection Group query failed (may need index), falling back to single collection:", error);
             
             // Fallback to just company tasks if index isn't ready
             fallbackUnsubscribe = onSnapshot(companyTasksRef, (snap) => {
                 const tasks = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), _path: doc.ref.path }));
                 setGlobalTasks(tasks);
+            }, (fallbackErr) => {
+                console.error("Fallback query failed:", fallbackErr);
+                setGlobalTasks([]); // To stop loading
             });
         });
 
