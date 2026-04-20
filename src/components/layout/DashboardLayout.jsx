@@ -37,8 +37,12 @@ export default function DashboardLayout() {
         { name: 'Chat', path: '/dashboard/chat', icon: <MessageSquare size={20} /> },
         { name: 'AI Ecosystem', path: '/dashboard/ai', icon: <Sparkles size={20} /> },
         { name: 'Meetings', path: '/dashboard/meetings', icon: <Video size={20} /> },
-        { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
-        ...(user?.role === 'master_admin' ? [{ name: 'Admin Panel', path: '/dashboard/admin', icon: <Shield size={20} />, danger: true }] : []),
+        ...(user?.uid === useStore.getState().activeCompany?.owner ? [
+            { name: 'Admin Panel', path: '/dashboard/settings', icon: <Shield size={20} />, danger: true }
+        ] : [
+            { name: 'Workspace Details', path: '/dashboard/settings', icon: <Settings size={20} /> }
+        ]),
+        ...(user?.role === 'master_admin' ? [{ name: 'Super Admin', path: '/dashboard/admin', icon: <Shield size={20} />, danger: true }] : []),
     ];
 
     const isDashboardActive = location.pathname === '/dashboard';

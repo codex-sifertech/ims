@@ -115,23 +115,9 @@ function App() {
 
         setCompanies(fetchedCompanies);
 
-        // Try to keep selection if it was there
-        const savedCompanyJson = localStorage.getItem('activeCompany');
-        if (savedCompanyJson && fetchedCompanies.length > 0) {
-          try {
-            const saved = JSON.parse(savedCompanyJson);
-            const matched = fetchedCompanies.find(c => c.id === saved.id);
-            if (matched) {
-                setActiveCompany(matched);
-            } else {
-                setActiveCompany(null);
-            }
-          } catch (e) {
-            setActiveCompany(null);
-          }
-        } else {
-            setActiveCompany(null);
-        }
+        // Per user request: Always force Workspace Selection on fresh load
+        setActiveCompany(null);
+        
       } else {
         setUser(null);
         setActiveCompany(null);
