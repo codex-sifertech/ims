@@ -121,15 +121,21 @@ function App() {
           try {
             const saved = JSON.parse(savedCompanyJson);
             const matched = fetchedCompanies.find(c => c.id === saved.id);
-            setActiveCompany(matched || fetchedCompanies[0]);
+            if (matched) {
+                setActiveCompany(matched);
+            } else {
+                setActiveCompany(null);
+            }
           } catch (e) {
-            setActiveCompany(fetchedCompanies[0]);
+            setActiveCompany(null);
           }
-        } else if (fetchedCompanies.length > 0) {
-          setActiveCompany(fetchedCompanies[0]);
+        } else {
+            setActiveCompany(null);
         }
       } else {
         setUser(null);
+        setActiveCompany(null);
+        localStorage.removeItem('activeCompany');
       }
       setLoading(false);
     });
