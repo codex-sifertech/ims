@@ -63,71 +63,81 @@ function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        const userData = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-          role: 'owner', // Default role for their own workspace
-          name: firebaseUser.displayName || firebaseUser.email.split('@')[0] || 'User'
-        };
-        
-        setUser(userData);
-        
-        // Fetch real companies from Firestore
-        const companiesRef = collection(db, 'companies');
-        // Firebase strictly requires the query to identically match the rule `request.auth.token.email in accessList`!
-        const q = query(companiesRef, where('accessList', 'array-contains', firebaseUser.email));
-        const companySnaps = await getDocs(q);
-        
-        let fetchedCompanies = companySnaps.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-
-        // Auto-create a Main Workspace if none exist (specifically for the admin)
-        if (fetchedCompanies.length === 0 && firebaseUser.email === 'sifertech.co@gmail.com') {
-          const newCompanyRef = doc(companiesRef); // Auto ID
-          const newCompanyId = newCompanyRef.id;
-          const newCompanyData = {
-            name: 'Main Workspace',
-            createdAt: new Date().toISOString(),
-            accessList: [firebaseUser.email],
-            owner: firebaseUser.uid
-          };
-          await setDoc(newCompanyRef, newCompanyData);
-          
-          // Also set the member document (CRITICAL for security rules)
-          const memberRef = doc(db, 'companies', newCompanyId, 'members', firebaseUser.uid);
-          await setDoc(memberRef, {
+        try {
+            const userData = {
+            uid: firebaseUser.uid,
             email: firebaseUser.email,
-            name: firebaseUser.displayName || 'Admin',
-            role: 'admin',
-            joinedAt: new Date().toISOString()
-          });
-          
-          fetchedCompanies = [{ id: newCompanyId, ...newCompanyData }];
-        }
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            role: 'owner', // Default role for their own workspace
+            name: firebaseUser.displayName || firebaseUser.email.split('@')[0] || 'User'
+            };
+            
+            setUser(userData);
+            
+            // Fetch real companies from Firestore
+            const companiesRef = collection(db, 'companies');
+            // Firebase strictly requires the query to identically match the rule `request.auth.token.email in accessList`!
+            const q = query(companiesRef, where('accessList', 'array-contains', firebaseUser.email));
+            const companySnaps = await getDocs(q);
+            
+            let fetchedCompanies = companySnaps.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+            }));
 
-        // Repair logic: Ensure user has a membership doc for all fetched companies
-        for (const company of fetchedCompanies) {
-          const memberRef = doc(db, 'companies', company.id, 'members', firebaseUser.uid);
-          const memberSnap = await getDoc(memberRef);
-          if (!memberSnap.exists()) {
+            // Auto-create a Main Workspace if none exist (specifically for the admin)
+            if (fetchedCompanies.length === 0 && firebaseUser.email === 'sifertech.co@gmail.com') {
+            const newCompanyRef = doc(companiesRef); // Auto ID
+            const newCompanyId = newCompanyRef.id;
+            const newCompanyData = {
+                name: 'Main Workspace',
+                createdAt: new Date().toISOString(),
+                accessList: [firebaseUser.email],
+                owner: firebaseUser.uid
+            };
+            await setDoc(newCompanyRef, newCompanyData);
+            
+            // Also set the member document (CRITICAL for security rules)
+            const memberRef = doc(db, 'companies', newCompanyId, 'members', firebaseUser.uid);
             await setDoc(memberRef, {
-              email: firebaseUser.email,
-              name: firebaseUser.displayName || 'Admin',
-              role: 'admin',
-              joinedAt: new Date().toISOString()
+                email: firebaseUser.email,
+                name: firebaseUser.displayName || 'Admin',
+                role: 'admin',
+                joinedAt: new Date().toISOString()
             });
-          }
+            
+            fetchedCompanies = [{ id: newCompanyId, ...newCompanyData }];
+            }
+
+            // Repair logic: Ensure user has a membership doc for all fetched companies
+            for (const company of fetchedCompanies) {
+            try {
+                const memberRef = doc(db, 'companies', company.id, 'members', firebaseUser.uid);
+                const memberSnap = await getDoc(memberRef);
+                if (!memberSnap.exists()) {
+                    await setDoc(memberRef, {
+                        email: firebaseUser.email,
+                        name: firebaseUser.displayName || 'Admin',
+                        role: 'admin',
+                        joinedAt: new Date().toISOString()
+                    });
+                }
+            } catch (memberErr) {
+                console.error("Non-fatal member assignment error:", memberErr);
+            }
+            }
+
+            setCompanies(fetchedCompanies);
+
+            // Per user request: Always force Workspace Selection on fresh load
+            setActiveCompany(null);
+        } catch (error) {
+            console.error("FATAL APPLOADS ERROR:", error);
+            // Fallback gracefully so UI doesn't indefinitely hang
+            setCompanies([]);
+            setActiveCompany(null);
         }
-
-        setCompanies(fetchedCompanies);
-
-        // Per user request: Always force Workspace Selection on fresh load
-        setActiveCompany(null);
-        
       } else {
         setUser(null);
         setActiveCompany(null);

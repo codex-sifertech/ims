@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import useStore from '../store/useStore';
 
 export function useGlobalTasks() {
-    const { activeCompany, setGlobalTasks, globalTasks } = useStore();
+    const { activeCompany, setGlobalTasks, globalTasks, user } = useStore();
 
     useEffect(() => {
         if (!activeCompany?.id) {
@@ -27,19 +27,18 @@ export function useGlobalTasks() {
             }));
         };
 
-        // 1. Listen to Company-level tasks
-        const companyTasksRef = collection(db, 'companies', activeCompany.id, 'tasks');
-        const unsubCompanyTasks = onSnapshot(companyTasksRef, (snap) => {
+        // 1. Listen to Global User Tasks
+        const userGlobalTasksRef = collection(db, 'globalTasks', user.uid, 'tasks');
+        const unsubGlobalTasks = onSnapshot(query(userGlobalTasksRef, where('companyId', '==', activeCompany.id)), (snap) => {
             snap.docs.forEach(doc => {
                 allTasks.set(doc.ref.path, { id: doc.id, ...doc.data(), _path: doc.ref.path });
             });
-            // Handle deletions
             snap.docChanges().forEach(change => {
                 if (change.type === 'removed') allTasks.delete(change.doc.ref.path);
             });
             updateState();
-        }, (err) => console.error("Error fetching company tasks:", err));
-        unsubscribes.push(unsubCompanyTasks);
+        }, (err) => console.error("Error fetching global tasks:", err));
+        unsubscribes.push(unsubGlobalTasks);
 
         // 2. Listen to Projects to dynamically attach task listeners for EACH project
         // This entirely bypasses the need for a strict collectionGroup index!
@@ -104,9 +103,9 @@ export function useGlobalTasks() {
     }, [activeCompany?.id, setGlobalTasks]);
 
     const addTask = async (taskData) => {
-        if (!activeCompany?.id) return;
+        if (!activeCompany?.id || !user?.uid) return;
         try {
-            const tasksRef = collection(db, 'companies', activeCompany.id, 'tasks');
+            const tasksRef = collection(db, 'globalTasks', user.uid, 'tasks');
             await addDoc(tasksRef, {
                 ...taskData,
                 createdAt: new Date().toISOString()
@@ -117,11 +116,11 @@ export function useGlobalTasks() {
     };
 
     const updateTask = async (taskId, updates) => {
-        if (!activeCompany?.id) return;
+        if (!activeCompany?.id || !user?.uid) return;
         try {
             // Find the task in the current globalTasks state to get its path
             const task = globalTasks.find(t => t.id === taskId);
-            const path = task?._path || `companies/${activeCompany.id}/tasks/${taskId}`;
+            const path = task?._path || `globalTasks/${user.uid}/tasks/${taskId}`;
             const taskRef = doc(db, path);
             await updateDoc(taskRef, updates);
         } catch (error) {
@@ -130,10 +129,10 @@ export function useGlobalTasks() {
     };
 
     const deleteTask = async (taskId) => {
-        if (!activeCompany?.id) return;
+        if (!activeCompany?.id || !user?.uid) return;
         try {
             const task = globalTasks.find(t => t.id === taskId);
-            const path = task?._path || `companies/${activeCompany.id}/tasks/${taskId}`;
+            const path = task?._path || `globalTasks/${user.uid}/tasks/${taskId}`;
             const taskRef = doc(db, path);
             await deleteDoc(taskRef);
         } catch (error) {
@@ -142,9 +141,9 @@ export function useGlobalTasks() {
     };
 
     const addTaskToGlobal = async (taskData) => {
-        if (!activeCompany?.id) return;
+        if (!activeCompany?.id || !user?.uid) return;
         try {
-            const tasksRef = collection(db, 'companies', activeCompany.id, 'tasks');
+            const tasksRef = collection(db, 'globalTasks', user.uid, 'tasks');
             await addDoc(tasksRef, {
                 ...taskData,
                 companyId: activeCompany.id,
