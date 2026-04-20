@@ -39,7 +39,7 @@ export default function Signup() {
     };
 
     return (
-        <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-dark-900 border-none m-0 p-0 overflow-hidden">
+        <div className="w-full min-h-screen grid grid-cols-1 md:grid-cols-2 bg-dark-900 border-none m-0 p-0 overflow-hidden">
             {/* Visual Section */}
             <div className="hidden md:flex flex-col justify-center items-center bg-dark-800 p-12 text-center border-r border-dark-700">
                 <h1 className="text-4xl font-bold text-white mb-6">Join IMS</h1>
