@@ -44,12 +44,21 @@ export function useGlobalTasks() {
                 const projectId = change.doc.id;
                 
                 if (change.type === 'added' || change.type === 'modified') {
+                    // Extract the project title so the UI can show human-readable names
+                    const projectTitle = change.doc.data().title || change.doc.data().name || `Project ${projectId.substring(0,4)}`;
+
                     // Only sub if we haven't already
                     if (!projectTaskUnsubs.has(projectId)) {
                         const pTasksRef = collection(db, 'companies', activeCompany.id, 'projects', projectId, 'tasks');
                         const unsubP = onSnapshot(pTasksRef, (pSnap) => {
                             pSnap.docs.forEach(doc => {
-                                allTasks.set(doc.ref.path, { id: doc.id, ...doc.data(), _path: doc.ref.path, projectId });
+                                allTasks.set(doc.ref.path, { 
+                                    id: doc.id, 
+                                    ...doc.data(), 
+                                    _path: doc.ref.path, 
+                                    projectId,
+                                    projectTitle // Embedded dynamically!
+                                });
                             });
                             pSnap.docChanges().forEach(c => {
                                 if (c.type === 'removed') allTasks.delete(c.doc.ref.path);
@@ -59,6 +68,14 @@ export function useGlobalTasks() {
                         
                         projectTaskUnsubs.set(projectId, unsubP);
                         unsubscribes.push(unsubP);
+                    } else {
+                        // If project title changed, update existing tasks in memory mapped to this project
+                        for (const [path, task] of allTasks.entries()) {
+                            if (task.projectId === projectId) {
+                                allTasks.set(path, { ...task, projectTitle });
+                            }
+                        }
+                        updateState();
                     }
                 }
                 
