@@ -12,41 +12,75 @@ export function useGlobalTasks() {
             return;
         }
 
-        // Fetch company-level tasks
+        const unsubscribes = [];
+        let allTasks = new Map(); // Store tasks by their unique _path
+
+        // Helper to merge and update global state
+        const updateState = () => {
+            setGlobalTasks(Array.from(allTasks.values()));
+        };
+
+        // 1. Listen to Company-level tasks
         const companyTasksRef = collection(db, 'companies', activeCompany.id, 'tasks');
-        
-        // Fetch ALL tasks in this company ecosystem using collectionGroup
-        // NOTE: This requires a Firestore index for collection 'tasks' with field 'companyId'
-        const allTasksQuery = query(
-            collectionGroup(db, 'tasks'),
-            where('companyId', '==', activeCompany.id)
-        );
-
-        let fallbackUnsubscribe = null;
-
-        const unsubscribe = onSnapshot(allTasksQuery, (snapshot) => {
-            const tasks = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                _path: doc.ref.path
-            }));
-            setGlobalTasks(tasks);
-        }, (error) => {
-            console.error("Collection Group query failed (may need index), falling back to single collection:", error);
-            
-            // Fallback to just company tasks if index isn't ready
-            fallbackUnsubscribe = onSnapshot(companyTasksRef, (snap) => {
-                const tasks = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), _path: doc.ref.path }));
-                setGlobalTasks(tasks);
-            }, (fallbackErr) => {
-                console.error("Fallback query failed:", fallbackErr);
-                setGlobalTasks([]); // To stop loading
+        const unsubCompanyTasks = onSnapshot(companyTasksRef, (snap) => {
+            snap.docs.forEach(doc => {
+                allTasks.set(doc.ref.path, { id: doc.id, ...doc.data(), _path: doc.ref.path });
             });
-        });
+            // Handle deletions
+            snap.docChanges().forEach(change => {
+                if (change.type === 'removed') allTasks.delete(change.doc.ref.path);
+            });
+            updateState();
+        }, (err) => console.error("Error fetching company tasks:", err));
+        unsubscribes.push(unsubCompanyTasks);
+
+        // 2. Listen to Projects to dynamically attach task listeners for EACH project
+        // This entirely bypasses the need for a strict collectionGroup index!
+        const projectsRef = collection(db, 'companies', activeCompany.id, 'projects');
+        const projectTaskUnsubs = new Map();
+
+        const unsubProjects = onSnapshot(projectsRef, (snap) => {
+            snap.docChanges().forEach(change => {
+                const projectId = change.doc.id;
+                
+                if (change.type === 'added' || change.type === 'modified') {
+                    // Only sub if we haven't already
+                    if (!projectTaskUnsubs.has(projectId)) {
+                        const pTasksRef = collection(db, 'companies', activeCompany.id, 'projects', projectId, 'tasks');
+                        const unsubP = onSnapshot(pTasksRef, (pSnap) => {
+                            pSnap.docs.forEach(doc => {
+                                allTasks.set(doc.ref.path, { id: doc.id, ...doc.data(), _path: doc.ref.path, projectId });
+                            });
+                            pSnap.docChanges().forEach(c => {
+                                if (c.type === 'removed') allTasks.delete(c.doc.ref.path);
+                            });
+                            updateState();
+                        }, (err) => console.error(`Error fetching tasks for project ${projectId}:`, err));
+                        
+                        projectTaskUnsubs.set(projectId, unsubP);
+                        unsubscribes.push(unsubP);
+                    }
+                }
+                
+                if (change.type === 'removed') {
+                    // Cleanup removed project listener
+                    const unsubP = projectTaskUnsubs.get(projectId);
+                    if (unsubP) unsubP();
+                    projectTaskUnsubs.delete(projectId);
+                    // Remove its tasks from memory
+                    for (const [path, task] of allTasks.entries()) {
+                        if (task.projectId === projectId) allTasks.delete(path);
+                    }
+                    updateState();
+                }
+            });
+        }, (err) => console.error("Error fetching projects for tasks:", err));
+        
+        unsubscribes.push(unsubProjects);
 
         return () => {
-            unsubscribe();
-            if (fallbackUnsubscribe) fallbackUnsubscribe();
+            unsubscribes.forEach(unsub => unsub());
+            projectTaskUnsubs.forEach(unsub => unsub());
         };
     }, [activeCompany?.id, setGlobalTasks]);
 
