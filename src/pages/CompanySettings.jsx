@@ -15,8 +15,8 @@ export default function CompanySettings() {
     const [isInviting, setIsInviting] = useState(false);
     const [inviteError, setInviteError] = useState('');
     
-    // Default to today in YYYY-MM-DD
-    const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
+    // Default to ALL time logs
+    const [dateFilter, setDateFilter] = useState('ALL');
 
     const isCompanyOwner = activeCompany?.owner === user?.uid || members.find(m => m.id === user?.uid)?.role === 'owner';
     const isCompanyAdmin = isCompanyOwner || members.find(m => m.id === user?.uid)?.role === 'admin';
@@ -39,15 +39,16 @@ export default function CompanySettings() {
         let unsubscribeLogs = () => {};
         if (activeCompany.owner === user?.uid && dateFilter) {
             const logsRef = collection(db, 'companies', activeCompany.id, 'attendanceLogs');
-            let q;
-            if (dateFilter === 'ALL') {
-                q = query(logsRef, orderBy('timestamp', 'desc'));
-            } else {
-                q = query(logsRef, where('dateGroup', '==', dateFilter), orderBy('timestamp', 'desc'));
-            }
+            // SINGLE FIELD QUERY to bypass Firebase Index requirements!
+            const q = query(logsRef, orderBy('timestamp', 'desc'));
             
             unsubscribeLogs = onSnapshot(q, (snap) => {
-                setTimeLogs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                let parsedLogs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Client-side filtration safely mimics 'where'
+                if (dateFilter !== 'ALL') {
+                    parsedLogs = parsedLogs.filter(log => log.dateGroup === dateFilter);
+                }
+                setTimeLogs(parsedLogs);
             });
         }
 
@@ -396,14 +397,22 @@ export default function CompanySettings() {
                                     </h2>
                                     <p className="text-sm text-slate-400 mt-1">Live feed of employee check-ins and check-outs.</p>
                                 </div>
-                                <div className="flex items-center gap-2 bg-dark-900 border border-dark-600 rounded-xl px-3 py-1.5 focus-within:border-primary-500 transition-colors">
-                                    <Calendar size={14} className="text-slate-400" />
-                                    <input 
-                                        type="date"
-                                        value={dateFilter}
-                                        onChange={e => setDateFilter(e.target.value)}
-                                        className="bg-transparent text-white text-sm font-medium focus:outline-none outline-none appearance-none cursor-pointer"
-                                    />
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setDateFilter('ALL')}
+                                        className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors border ${dateFilter === 'ALL' ? 'bg-primary-500/10 text-primary-400 border-primary-500/20' : 'bg-dark-900 text-slate-500 border-dark-600 hover:border-slate-500'}`}
+                                    >
+                                        All Time
+                                    </button>
+                                    <div className="flex items-center gap-2 bg-dark-900 border border-dark-600 rounded-xl px-3 py-1.5 focus-within:border-primary-500 transition-colors">
+                                        <Calendar size={14} className="text-slate-400" />
+                                        <input 
+                                            type="date"
+                                            value={dateFilter !== 'ALL' ? dateFilter : ''}
+                                            onChange={e => setDateFilter(e.target.value)}
+                                            className="bg-transparent text-white text-sm font-medium focus:outline-none outline-none appearance-none cursor-pointer"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
