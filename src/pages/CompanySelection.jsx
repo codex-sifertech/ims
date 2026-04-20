@@ -36,7 +36,6 @@ export default function CompanySelection() {
         setCreateError('');
         setIsSaving(true);
         try {
-            const batch = writeBatch(db);
             const newCompanyRef = doc(collection(db, 'companies'));
             
             const newCompanyData = {
@@ -46,17 +45,17 @@ export default function CompanySelection() {
                 owner: user.uid,
             };
             
-            batch.set(newCompanyRef, newCompanyData);
+            // 1. Create company FIRST. This satisfies get().data.owner check sequentially
+            await setDoc(newCompanyRef, newCompanyData);
             
+            // 2. Create the member doc. It will now successfully verify against the live company doc.
             const memberRef = doc(db, 'companies', newCompanyRef.id, 'members', user.uid);
-            batch.set(memberRef, {
+            await setDoc(memberRef, {
                 email: user.email.toLowerCase(),
                 name: user.name || user.displayName || 'Creator',
                 role: 'admin',
                 joinedAt: new Date().toISOString(),
             });
-
-            await batch.commit();
 
             const newCompany = { id: newCompanyRef.id, ...newCompanyData };
             setCompanies([...companies, newCompany]);
