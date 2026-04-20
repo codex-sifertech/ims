@@ -37,7 +37,7 @@ export default function CompanySettings() {
         });
 
         let unsubscribeLogs = () => {};
-        if (activeCompany.owner === user?.uid && dateFilter) {
+        if (activeCompany?.id && dateFilter) {
             const logsRef = collection(db, 'companies', activeCompany.id, 'attendance', dateFilter, 'logs');
             const q = query(logsRef, orderBy('timestamp', 'desc'));
             
