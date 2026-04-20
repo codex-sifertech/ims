@@ -4,7 +4,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { collection, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
 import useStore from './store/useStore';
-import { validateUserAccess } from './config/accessControl';
 
 // Components
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -21,6 +20,7 @@ import CompanySettings from './pages/CompanySettings';
 import AdminPanel from './pages/AdminPanel';
 
 import Login from './components/auth/Login';
+import Signup from './components/auth/Signup';
 
 function ProtectedRoute({ children }) {
   const { user, isLoading } = useStore();
@@ -49,29 +49,18 @@ function MainRoute() {
 }
 
 function App() {
-  const { setLoading, setCompanies, setUser, setActiveCompany, activeCompany } = useStore();
+  const { setLoading, setCompanies, setUser, setActiveCompany, activeCompany, user } = useStore();
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Find existing authorized role if any
-        const accessCheck = validateUserAccess(firebaseUser.email);
-        
-        if (!accessCheck) {
-          console.warn("Unauthorized access attempt:", firebaseUser.email);
-          setUser(null);
-          await auth.signOut().catch(console.error);
-          setLoading(false);
-          return;
-        }
-
         const userData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
-          role: accessCheck.role,
-          name: firebaseUser.displayName || accessCheck.name || 'User'
+          role: 'owner', // Default role for their own workspace
+          name: firebaseUser.displayName || firebaseUser.email.split('@')[0] || 'User'
         };
         
         setUser(userData);
@@ -153,7 +142,8 @@ function App() {
       <Routes>
         {/* Landing/Selection Route */}
         <Route path="/" element={<MainRoute />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+        <Route path="/signup" element={user ? <Navigate to="/" /> : <Signup />} />
 
         {/* Protected Dashboard Routes */}
         <Route path="/dashboard" element={

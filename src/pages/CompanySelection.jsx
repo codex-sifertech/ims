@@ -1,16 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { collection, doc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import useStore from '../store/useStore';
-import { Building2, Plus, ArrowRight } from 'lucide-react';
+import { Building2, Plus, ArrowRight, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const MOTIVATIONAL_QUOTES = [
-    "Innovation distinguishes between a leader and a follower.",
-    "The best way to predict the future is to create it.",
-    "Make it work, make it right, make it fast.",
-    "Transforming ideas into digital reality.",
-    "Quality is not an act, it is a habit."
-];
 
 const BACKGROUND_IMAGES = [
     "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920&auto=format&fit=crop", // Galaxy/Earth
@@ -22,27 +16,14 @@ const BACKGROUND_IMAGES = [
 ];
 
 export default function CompanySelection() {
-    const { companies, setActiveCompany, setCompanies } = useStore();
+    const { companies, setActiveCompany, setCompanies, user } = useStore();
     const navigate = useNavigate();
     const [newCompanyName, setNewCompanyName] = useState('');
     const [isCreating, setIsCreating] = useState(false);
-
-    // Intro screen state
-    const [showIntro, setShowIntro] = useState(true);
-
-    const randomQuote = useMemo(() => {
-        return MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
-    }, []);
+    const [isSaving, setIsSaving] = useState(false);
 
     const randomBackground = useMemo(() => {
         return BACKGROUND_IMAGES[Math.floor(Math.random() * BACKGROUND_IMAGES.length)];
-    }, []);
-
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setShowIntro(false);
-        }, 3000); // Intro lasts 3 seconds before switching
-        return () => clearTimeout(timer);
     }, []);
 
     const handleSelectCompany = (company) => {
@@ -50,18 +31,46 @@ export default function CompanySelection() {
         navigate('/dashboard');
     };
 
-    const handleCreateCompany = (e) => {
+    const handleCreateCompany = async (e) => {
         e.preventDefault();
-        if (!newCompanyName.trim()) return;
+        if (!newCompanyName.trim() || !user) return;
 
-        const newCompany = {
-            id: `company-${Date.now()}`,
-            name: newCompanyName.trim()
-        };
+        setIsSaving(true);
+        try {
+            const newCompanyRef = doc(collection(db, 'companies'));
+            const newCompanyData = {
+                name: newCompanyName.trim(),
+                createdAt: new Date().toISOString(),
+                accessList: [user.email], // Add creator to access list
+                owner: user.uid
+            };
 
-        setCompanies([...companies, newCompany]);
-        setActiveCompany(newCompany);
-        navigate('/dashboard');
+            // 1. Create company doc
+            await setDoc(newCompanyRef, newCompanyData);
+
+            // 2. Create membership doc for the creator (crucial for security rules)
+            const memberRef = doc(db, 'companies', newCompanyRef.id, 'members', user.uid);
+            await setDoc(memberRef, {
+                email: user.email,
+                name: user.name || user.displayName || 'Owner',
+                role: 'owner', // Creator is owner
+                joinedAt: new Date().toISOString()
+            });
+
+            const newCompany = {
+                id: newCompanyRef.id,
+                ...newCompanyData
+            };
+
+            setCompanies([...companies, newCompany]);
+            setActiveCompany(newCompany);
+            navigate('/dashboard');
+        } catch (error) {
+            console.error("Error saving new workspace:", error);
+            // Optionally set an error state here to show the user
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -77,42 +86,14 @@ export default function CompanySelection() {
             <div className="absolute inset-0 bg-dark-900/80 backdrop-blur-sm z-0"></div>
 
             <AnimatePresence mode="wait">
-                {showIntro ? (
-                    <motion.div
-                        key="intro-screen"
-                        className="absolute inset-0 z-50 flex flex-col items-center justify-center"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0, scale: 2, filter: 'blur(15px)' }} // Teleport zoom effect
-                        transition={{ duration: 0.8, ease: "easeInOut" }}
-                    >
-                        <motion.h1
-                            className="text-6xl md:text-7xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-t from-dark-800 via-slate-300 to-white pb-2 mb-4 drop-shadow-2xl"
-                            initial={{ y: 30, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ duration: 0.8, delay: 0.3 }}
-                        >
-                            SiferTech
-                        </motion.h1>
-
-                        <motion.p
-                            className="text-lg md:text-xl text-slate-400 italic font-medium max-w-xl text-center px-6"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ duration: 1, delay: 1 }}
-                        >
-                            "{randomQuote}"
-                        </motion.p>
-                    </motion.div>
-                ) : (
-                    <motion.div
-                        key="main-screen"
-                        className="max-w-md w-full relative z-10"
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }} // Show slightly after intro starts fading
-                    >
-                        <div className="text-center mb-8">
+                <motion.div
+                    key="main-screen"
+                    className="max-w-md w-full relative z-10"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                >
+                    <div className="text-center mb-8">
                             <div className="w-16 h-16 bg-primary-600/20 text-primary-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary-500/30">
                                 <Building2 size={32} />
                             </div>
@@ -171,10 +152,10 @@ export default function CompanySelection() {
                                             </button>
                                             <button
                                                 type="submit"
-                                                disabled={!newCompanyName.trim()}
-                                                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-500 disabled:opacity-50 disabled:hover:bg-primary-600 transition-colors font-medium"
+                                                disabled={!newCompanyName.trim() || isSaving}
+                                                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-500 disabled:opacity-50 disabled:hover:bg-primary-600 transition-colors font-medium flex items-center justify-center gap-2"
                                             >
-                                                Create
+                                                {isSaving ? <Loader2 size={18} className="animate-spin" /> : 'Create'}
                                             </button>
                                         </div>
                                     </form>
@@ -190,7 +171,6 @@ export default function CompanySelection() {
                             </div>
                         </div>
                     </motion.div>
-                )}
             </AnimatePresence>
         </div>
     );
