@@ -90,7 +90,6 @@ export default function ProjectDetailsPage() {
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase border ${STATUS_STYLE[project.status] || STATUS_STYLE.ongoing}`}>
                                     {project.status || 'Ongoing'}
                                 </span>
-                                <span className="text-xs text-slate-600 font-mono">#{project.id.substring(0, 8)}</span>
                             </div>
                             <h1 className="text-lg font-bold text-white mt-0.5 leading-tight truncate">{project.title}</h1>
                         </div>
