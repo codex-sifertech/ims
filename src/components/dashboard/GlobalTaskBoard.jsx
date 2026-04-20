@@ -26,6 +26,8 @@ const PROJECT_COLORS = [
 export default function GlobalTaskBoard() {
     const { globalTasks, tasksLoading } = useStore();
     const { addTask, deleteTask } = useGlobalTasks();
+    const [isAddingCard, setIsAddingCard] = useState(null);
+    const [newCardTitle, setNewCardTitle] = useState('');
     const [newCardPriority, setNewCardPriority] = useState('Medium');
     const [newCardAssignee, setNewCardAssignee] = useState('');
     const [newCardTags, setNewCardTags] = useState('');
