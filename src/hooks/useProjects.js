@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 
@@ -45,7 +45,21 @@ export function useProjects() {
         try {
             console.log("Creating project under company:", activeCompany.id);
             const projectsRef = collection(db, 'companies', activeCompany.id, 'projects');
-            const docRef = await addDoc(projectsRef, {
+            
+            // Sanitize title for valid Firestore document ID
+            let docId = projectData.title.trim().replace(/[\/\\?#%]/g, '-');
+            if (!docId) docId = `Project-${Date.now()}`;
+
+            let docRef = doc(projectsRef, docId);
+            
+            // Prevent exact-name collisions by appending a short ID if it already exists
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                docId = `${docId}-${Math.floor(1000 + Math.random() * 9000)}`;
+                docRef = doc(projectsRef, docId);
+            }
+
+            await setDoc(docRef, {
                 ...projectData,
                 createdBy: user.uid,
                 createdByName: user.name || user.email,
