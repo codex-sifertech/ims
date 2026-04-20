@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
-import { Settings, Shield, User, UserPlus, CheckCircle2, Loader2, Trash2, Mail, Users } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Settings, Shield, User, UserPlus, CheckCircle2, Loader2, Trash2, Mail, Users, Calendar } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 
 export default function CompanySettings() {
     const { activeCompany, user } = useStore();
@@ -14,6 +14,9 @@ export default function CompanySettings() {
     const [inviteRole, setInviteRole] = useState('member');
     const [isInviting, setIsInviting] = useState(false);
     const [inviteError, setInviteError] = useState('');
+    
+    // Default to today in YYYY-MM-DD
+    const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
 
     const isCompanyOwner = activeCompany?.owner === user?.uid || members.find(m => m.id === user?.uid)?.role === 'owner';
     const isCompanyAdmin = isCompanyOwner || members.find(m => m.id === user?.uid)?.role === 'admin';
@@ -34,9 +37,8 @@ export default function CompanySettings() {
         });
 
         let unsubscribeLogs = () => {};
-        if (activeCompany.owner === user?.uid) {
-            const today = new Date().toISOString().split('T')[0];
-            const logsRef = collection(db, 'companies', activeCompany.id, 'attendance', today, 'logs');
+        if (activeCompany.owner === user?.uid && dateFilter) {
+            const logsRef = collection(db, 'companies', activeCompany.id, 'attendance', dateFilter, 'logs');
             const q = query(logsRef, orderBy('timestamp', 'desc'));
             unsubscribeLogs = onSnapshot(q, (snap) => {
                 setTimeLogs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -47,7 +49,7 @@ export default function CompanySettings() {
             unsubscribeMembers();
             unsubscribeLogs();
         };
-    }, [activeCompany?.id, user?.uid]);
+    }, [activeCompany?.id, activeCompany?.owner, user?.uid, dateFilter]);
 
     const handleInvite = async (e) => {
         e.preventDefault();
@@ -380,17 +382,28 @@ export default function CompanySettings() {
                     {/* ── TIME LOGS (OWNER ONLY) ── */}
                     {isCompanyOwner && (
                         <div className="bg-dark-800/60 backdrop-blur-md border border-dark-700 rounded-2xl flex flex-col h-96 shadow-xl overflow-hidden mt-6">
-                            <div className="p-6 border-b border-dark-700 bg-dark-800 shrink-0">
-                                <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                    <Shield size={18} className="text-primary-400" />
-                                    Today's Time Logs
-                                </h2>
-                                <p className="text-sm text-slate-400 mt-1">Live feed of employee check-ins and check-outs.</p>
+                            <div className="p-6 border-b border-dark-700 bg-dark-800 flex items-center justify-between shrink-0">
+                                <div>
+                                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                        <Shield size={18} className="text-primary-400" />
+                                        Historical Time Logs
+                                    </h2>
+                                    <p className="text-sm text-slate-400 mt-1">Live feed of employee check-ins and check-outs.</p>
+                                </div>
+                                <div className="flex items-center gap-2 bg-dark-900 border border-dark-600 rounded-xl px-3 py-1.5 focus-within:border-primary-500 transition-colors">
+                                    <Calendar size={14} className="text-slate-400" />
+                                    <input 
+                                        type="date"
+                                        value={dateFilter}
+                                        onChange={e => setDateFilter(e.target.value)}
+                                        className="bg-transparent text-white text-sm font-medium focus:outline-none outline-none appearance-none cursor-pointer"
+                                    />
+                                </div>
                             </div>
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
                                 {timeLogs.length === 0 ? (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-500 py-10 text-sm">
-                                        No time logs recorded today.
+                                        No time logs recorded for {dateFilter}.
                                     </div>
                                 ) : (
                                     <div className="space-y-3">

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Loader2, Trash2, FolderOpen, MoreVertical } from 'lucide-react';
+import { Plus, Loader2, Trash2, FolderOpen, MoreVertical, Search } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useGlobalTasks } from '../../hooks/useGlobalTasks';
 import useStore from '../../store/useStore';
@@ -80,6 +80,20 @@ export default function GlobalTaskBoard() {
         setIsAddingCard(null);
     };
 
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Filter tasks based on search
+    const filteredTasks = useMemo(() => {
+        if (!searchQuery.trim()) return globalTasks;
+        const q = searchQuery.toLowerCase();
+        return globalTasks.filter(t => 
+            t.title?.toLowerCase().includes(q) || 
+            t.projectTitle?.toLowerCase().includes(q) ||
+            t.assignedTo?.toLowerCase().includes(q) ||
+            t.tags?.some(tag => tag.toLowerCase().includes(q))
+        );
+    }, [globalTasks, searchQuery]);
+
     if (tasksLoading) {
         return (
             <div className="h-full flex items-center justify-center text-slate-500 gap-3">
@@ -91,16 +105,28 @@ export default function GlobalTaskBoard() {
 
     const columns = COLUMNS.map(col => ({
         ...col,
-        cards: globalTasks.filter(t => t.status === col.id),
+        cards: filteredTasks.filter(t => t.status === col.id),
     }));
 
     return (
         <div className="h-full flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-white">
-                    Global Task Board
-                    <span className="ml-2 text-sm font-normal text-slate-500">{globalTasks.length} tasks across all projects</span>
-                </h2>
+            <div className="flex items-center justify-between mb-6 shrink-0">
+                <div>
+                    <h2 className="text-xl font-black text-white tracking-tight">
+                        Global Task Board
+                    </h2>
+                    <p className="text-sm font-medium text-slate-500 mt-1">{filteredTasks.length} tasks matching criteria ({globalTasks.length} total)</p>
+                </div>
+                <div className="bg-dark-800/80 border border-dark-700 focus-within:border-primary-500 rounded-xl px-4 py-2 flex items-center gap-3 w-72 transition-colors">
+                    <Search className="text-slate-500" size={16} />
+                    <input 
+                        type="text" 
+                        placeholder="Search tasks, projects, assignees..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="bg-transparent border-none text-white text-sm outline-none w-full placeholder:text-slate-600"
+                    />
+                </div>
             </div>
 
             <DragDropContext onDragEnd={onDragEnd}>
