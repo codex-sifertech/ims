@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { collection, doc, setDoc, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import { signOut } from 'firebase/auth';
 import useStore from '../store/useStore';
-import { Building2, Plus, ArrowRight, Loader2, ChevronRight, X } from 'lucide-react';
+import { Building2, Plus, ArrowRight, Loader2, ChevronRight, X, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const BG_IMAGES = [
@@ -92,9 +93,15 @@ export default function CompanySelection() {
                         <Building2 size={32} />
                     </div>
                     <h1 className="text-3xl font-bold text-white">Choose a Workspace</h1>
-                    <p className="text-slate-400 mt-2 text-sm">
+                    <p className="text-slate-400 mt-2 text-sm text-balance">
                         {user?.name && <span className="text-primary-400 font-medium">{user.name}</span>} · Select or create a workspace to continue.
                     </p>
+                    <button 
+                        onClick={() => signOut(auth)}
+                        className="mt-5 px-5 py-2 min-w-[120px] bg-dark-800/80 hover:bg-red-500/10 text-red-400 text-[10px] font-black uppercase tracking-widest rounded-xl border border-red-500/20 flex items-center justify-center gap-2 mx-auto transition-colors shadow-sm"
+                    >
+                        <LogOut size={14} /> Sign Out
+                    </button>
                 </div>
 
                 <div className="space-y-4">
