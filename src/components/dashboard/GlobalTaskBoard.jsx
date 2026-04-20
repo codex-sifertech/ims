@@ -26,25 +26,21 @@ const PROJECT_COLORS = [
 export default function GlobalTaskBoard() {
     const { globalTasks, tasksLoading } = useStore();
     const { addTask, deleteTask } = useGlobalTasks();
-    const [isAddingCard, setIsAddingCard] = useState(null);
-    const [newCardTitle, setNewCardTitle] = useState('');
+    const [newCardPriority, setNewCardPriority] = useState('Medium');
+    const [newCardAssignee, setNewCardAssignee] = useState('');
+    const [newCardTags, setNewCardTags] = useState('');
 
-    // Map projectId → colour index so each project always has the same colour
-    const projectColorMap = useMemo(() => {
-        const map = {};
-        let idx = 0;
-        globalTasks.forEach(t => {
-            if (t.projectId && !(t.projectId in map)) {
-                map[t.projectId] = idx++ % PROJECT_COLORS.length;
-            }
-        });
-        return map;
-    }, [globalTasks]);
+    const getProjectColorClass = (id) => {
+        if (!id) return PROJECT_COLORS[0];
+        let hash = 0;
+        for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
+        return PROJECT_COLORS[Math.abs(hash) % PROJECT_COLORS.length];
+    };
 
     const getProjectLabel = (task) => {
         if (!task.projectId && !task.projectTitle) return null;
         const label = task.projectTitle || `Project ${task.projectId?.substring(0, 4)}`;
-        const colorClass = PROJECT_COLORS[projectColorMap[task.projectId] ?? 0];
+        const colorClass = getProjectColorClass(task.projectId);
         return { label, colorClass };
     };
 
@@ -65,8 +61,20 @@ export default function GlobalTaskBoard() {
     const handleAddCard = async (e, colId) => {
         e.preventDefault();
         if (!newCardTitle.trim()) return;
-        await addTask({ title: newCardTitle.trim(), status: colId, type: 'company' });
+        
+        await addTask({ 
+            title: newCardTitle.trim(), 
+            status: colId, 
+            type: 'company',
+            priority: newCardPriority,
+            assignedTo: newCardAssignee.trim(),
+            tags: newCardTags.split(',').map(t => t.trim().toUpperCase()).filter(Boolean)
+        });
+        
         setNewCardTitle('');
+        setNewCardPriority('Medium');
+        setNewCardAssignee('');
+        setNewCardTags('');
         setIsAddingCard(null);
     };
 
@@ -136,15 +144,26 @@ export default function GlobalTaskBoard() {
                                                                 </button>
                                                             </div>
 
-                                                            {/* Project label */}
-                                                            {projLabel && (
-                                                                <div className="flex items-center gap-1 mt-2">
-                                                                    <FolderOpen size={10} className="text-slate-500" />
-                                                                    <span className={`text-[9px] px-2 py-0.5 rounded-md border font-bold uppercase tracking-widest ${projLabel.colorClass}`}>
-                                                                        {projLabel.label}
+                                                            {/* Project label & Priority */}
+                                                            <div className="flex flex-wrap gap-1 mt-2 items-center">
+                                                                {projLabel && (
+                                                                    <div className="flex items-center gap-1">
+                                                                        <FolderOpen size={10} className="text-slate-500" />
+                                                                        <span className={`text-[9px] px-2 py-0.5 rounded-md border font-bold uppercase tracking-widest ${projLabel.colorClass}`}>
+                                                                            {projLabel.label}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {card.priority && (
+                                                                    <span className={`text-[9px] px-2 py-0.5 rounded-md border font-bold uppercase tracking-widest ${
+                                                                        card.priority === 'High' ? 'bg-red-500/20 text-red-400 border-red-500/20' : 
+                                                                        card.priority === 'Low' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/20' :
+                                                                        'bg-blue-500/20 text-blue-400 border-blue-500/20'
+                                                                    }`}>
+                                                                        {card.priority}
                                                                     </span>
-                                                                </div>
-                                                            )}
+                                                                )}
+                                                            </div>
 
                                                             {/* Tags */}
                                                             {card.tags?.length > 0 && (
@@ -158,8 +177,8 @@ export default function GlobalTaskBoard() {
                                                             )}
 
                                                             <div className="flex items-center justify-between mt-3 pt-2 border-t border-dark-800">
-                                                                <span className="text-[9px] text-slate-600 uppercase tracking-wider">
-                                                                    {card.assignedTo || card.createdBy || '—'}
+                                                                <span className="text-[9px] text-slate-600 font-bold tracking-wider">
+                                                                    {card.assignedTo || card.createdBy || 'UNASSIGNED'}
                                                                 </span>
                                                                 <span className="text-[9px] text-slate-700 font-mono">#{card.id.substring(0, 4)}</span>
                                                             </div>
@@ -170,10 +189,10 @@ export default function GlobalTaskBoard() {
                                         })}
                                         {provided.placeholder}
 
-                                        {/* Add card inline */}
+                                        {/* Add card Inline Form Extension */}
                                         {isAddingCard === col.id ? (
                                             <form onSubmit={(e) => handleAddCard(e, col.id)} className="mt-2">
-                                                <div className="bg-dark-900 p-3 rounded-xl border border-primary-500/50 shadow-lg">
+                                                <div className="bg-dark-900 p-3.5 rounded-xl border border-primary-500/50 shadow-lg flex flex-col gap-3">
                                                     <textarea
                                                         autoFocus
                                                         value={newCardTitle}
@@ -182,13 +201,42 @@ export default function GlobalTaskBoard() {
                                                             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCard(e, col.id); }
                                                             if (e.key === 'Escape') setIsAddingCard(null);
                                                         }}
-                                                        className="w-full bg-transparent border-none p-0 text-sm text-white resize-none focus:ring-0 placeholder-slate-600"
-                                                        placeholder="Task title..."
+                                                        className="w-full bg-transparent border-none p-0 text-sm text-white font-medium resize-none focus:ring-0 placeholder-slate-600"
+                                                        placeholder="Task objective..."
                                                         rows={2}
                                                     />
-                                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-dark-800">
-                                                        <button type="button" onClick={() => setIsAddingCard(null)} className="text-[11px] font-bold text-slate-500 hover:text-white uppercase tracking-wider">Cancel</button>
-                                                        <button type="submit" className="px-3 py-1 bg-primary-600 text-white text-[11px] font-bold rounded-lg hover:bg-primary-500 uppercase tracking-wider">Add</button>
+                                                    
+                                                    <div className="flex flex-col gap-2 border-t border-dark-800 pt-3">
+                                                        <div className="flex gap-2">
+                                                            <select 
+                                                                value={newCardPriority} 
+                                                                onChange={e => setNewCardPriority(e.target.value)}
+                                                                className="flex-1 bg-dark-800 border-none rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:ring-1 focus:ring-primary-500 appearance-none font-bold outline-none"
+                                                            >
+                                                                <option value="Low">Low Priority</option>
+                                                                <option value="Medium">Medium Priority</option>
+                                                                <option value="High">High Priority</option>
+                                                            </select>
+                                                            <input 
+                                                                type="text" 
+                                                                placeholder="Assignee..." 
+                                                                value={newCardAssignee}
+                                                                onChange={e => setNewCardAssignee(e.target.value)}
+                                                                className="flex-1 bg-dark-800 border-none rounded-lg px-2 py-1.5 text-xs text-white focus:ring-1 focus:ring-primary-500 font-medium outline-none"
+                                                            />
+                                                        </div>
+                                                        <input 
+                                                            type="text" 
+                                                            placeholder="Tags (comma separated)..." 
+                                                            value={newCardTags}
+                                                            onChange={e => setNewCardTags(e.target.value)}
+                                                            className="w-full bg-dark-800 border-none rounded-lg px-2 py-1.5 text-[10px] text-slate-400 focus:ring-1 focus:ring-primary-500 uppercase tracking-widest outline-none"
+                                                        />
+                                                    </div>
+
+                                                    <div className="flex items-center justify-between mt-1">
+                                                        <button type="button" onClick={() => setIsAddingCard(null)} className="text-[10px] font-black text-slate-500 hover:text-white uppercase tracking-wider px-2 py-1">Cancel</button>
+                                                        <button type="submit" disabled={!newCardTitle.trim()} className="px-4 py-1.5 bg-primary-600 text-white text-[10px] font-black rounded-lg hover:bg-primary-500 disabled:opacity-50 uppercase tracking-wider">Publish Task</button>
                                                     </div>
                                                 </div>
                                             </form>

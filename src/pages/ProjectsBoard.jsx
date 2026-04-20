@@ -36,19 +36,37 @@ function LabelBadge({ label }) {
     );
 }
 
+const PROJECT_COLORS = [
+    { border: 'border-l-primary-500', title: 'group-hover:text-primary-400' },
+    { border: 'border-l-violet-500',  title: 'group-hover:text-violet-400' },
+    { border: 'border-l-cyan-500',    title: 'group-hover:text-cyan-400' },
+    { border: 'border-l-amber-500',   title: 'group-hover:text-amber-400' },
+    { border: 'border-l-rose-500',    title: 'group-hover:text-rose-400' },
+    { border: 'border-l-emerald-500', title: 'group-hover:text-emerald-400' },
+];
+
+const getProjectColorConfig = (id) => {
+    if (!id) return PROJECT_COLORS[0];
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
+    return PROJECT_COLORS[Math.abs(hash) % PROJECT_COLORS.length];
+};
+
 function ProjectCard({ project, onClick }) {
     const cfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ongoing;
+    const colorCfg = getProjectColorConfig(project.id);
+    
     return (
         <motion.div
             onClick={onClick}
             layout
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`group bg-dark-800/80 border border-dark-700/60 border-l-4 ${cfg.border} rounded-2xl p-4 cursor-pointer hover:-translate-y-0.5 hover:bg-dark-800 transition-all duration-200 flex flex-col gap-2.5`}
+            className={`group bg-dark-800/80 border border-dark-700/60 border-l-4 ${colorCfg.border} rounded-2xl p-4 cursor-pointer hover:-translate-y-0.5 hover:bg-dark-800 transition-all duration-200 flex flex-col gap-2.5`}
         >
             {/* Title row */}
             <div className="flex justify-between items-start gap-2">
-                <h3 className="font-bold text-white text-sm leading-snug group-hover:text-primary-400 transition-colors line-clamp-2 flex-1">
+                <h3 className={`font-bold text-white text-sm leading-snug ${colorCfg.title} transition-colors line-clamp-2 flex-1`}>
                     {project.title}
                 </h3>
                 <ChevronRight size={14} className="text-slate-600 group-hover:text-primary-400 opacity-0 group-hover:opacity-100 transition-all shrink-0 mt-0.5" />

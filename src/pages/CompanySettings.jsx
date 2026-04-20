@@ -107,6 +107,45 @@ export default function CompanySettings() {
         }
     };
 
+    const handleExportData = () => {
+        if (!activeCompany?.id) return;
+        // In a real scenario we'd query all members, projects, and tasks for a complete tree
+        // For MVP, export the company document & local membership dump
+        const exportTree = {
+            metadata: activeCompany,
+            members: members,
+            exportDate: new Date().toISOString()
+        };
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportTree, null, 2));
+        const anchor = document.createElement('a');
+        anchor.href = dataStr;
+        anchor.download = `${activeCompany.name.replace(/\s+/g, '_')}_backup.json`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+    };
+
+    const handleDeleteWorkspace = async () => {
+        if (!isCompanyOwner || !activeCompany?.id) return;
+        
+        const confirmation = window.prompt(`DANGER: This action cannot be undone. All data will be permanently deleted.\n\nType the name of your workspace ("${activeCompany.name}") to confirm:`);
+        if (confirmation !== activeCompany.name) {
+            if (confirmation !== null) alert("Workspace name did not match. Deletion cancelled.");
+            return;
+        }
+
+        try {
+            // Delete the workspace root (Cloud Functions normally handles recursive nested subcollections)
+            await deleteDoc(doc(db, 'companies', activeCompany.id));
+            alert("Workspace successfully deleted.");
+            localStorage.removeItem('activeCompany');
+            window.location.href = '/'; 
+        } catch (error) {
+            console.error("Error deleting workspace:", error);
+            alert("Failed to delete workspace. Ensure you are the owner.");
+        }
+    };
+
     return (
         <div className="h-full flex flex-col p-8 overflow-y-auto bg-dark-900 custom-scrollbar">
             <header className="mb-8 border-b border-dark-700 pb-6 shrink-0">
@@ -121,7 +160,7 @@ export default function CompanySettings() {
 
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8 pb-8">
                 {/* ── WORKSPACE INF0 ── */}
-                <div className="lg:col-span-1 space-y-6">
+                <div className="lg:col-span-1 flex flex-col gap-6">
                     <div className="bg-dark-800/60 backdrop-blur-md border border-dark-700 rounded-2xl p-6 shadow-xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                             <Settings size={120} className="rotate-45" />
@@ -160,6 +199,34 @@ export default function CompanySettings() {
                             )}
                         </div>
                     </div>
+
+                    {/* ── DANGER ZONE ── */}
+                    {isCompanyOwner && (
+                        <div className="bg-dark-800/60 border border-red-500/20 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                            <h2 className="text-lg font-bold text-red-400 mb-2 flex items-center gap-2">
+                                Danger Zone
+                            </h2>
+                            <p className="text-xs text-slate-400 leading-relaxed mb-5">
+                                Ensure you securely export your workspace data before permanently deleting it. Deletion cannot be reversed.
+                            </p>
+                            
+                            <div className="flex flex-col gap-3">
+                                <button 
+                                    onClick={handleExportData}
+                                    className="w-full py-2.5 border border-primary-500/30 text-primary-400 rounded-xl hover:bg-primary-500/10 transition-colors text-sm font-bold uppercase tracking-widest"
+                                >
+                                    Export JSON Tree
+                                </button>
+                                <button 
+                                    onClick={handleDeleteWorkspace}
+                                    className="w-full py-2.5 border border-red-500/30 text-red-400 rounded-xl hover:bg-red-500/10 transition-colors text-sm font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+                                >
+                                    <Trash2 size={16} />
+                                    Delete Workspace
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* ── ACCESS MANAGEMENT ── */}
