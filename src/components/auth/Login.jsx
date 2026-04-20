@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ShieldAlert, ArrowRight, Building2 } from 'lucide-react';
+import { ShieldAlert, ArrowRight, Building2, Eye, EyeOff } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../firebase';
@@ -13,25 +13,27 @@ const MOTIVATIONAL_QUOTES = [
     "Quality is not an act, it is a habit."
 ];
 
+const BG_IMAGES = [
+    "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1920&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=1920&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1920&auto=format&fit=crop",
+];
+
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    
-    // Intro screen state
     const [showIntro, setShowIntro] = useState(true);
     const navigate = useNavigate();
 
-    const randomQuote = useMemo(() => {
-        return MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
-    }, []);
+    const randomQuote = useMemo(() => MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)], []);
+    const randomBg = useMemo(() => BG_IMAGES[Math.floor(Math.random() * BG_IMAGES.length)], []);
 
     useEffect(() => {
-        // Automatically hide intro after 3 seconds
-        const timer = setTimeout(() => {
-            setShowIntro(false);
-        }, 3000);
+        const timer = setTimeout(() => setShowIntro(false), 3200);
         return () => clearTimeout(timer);
     }, []);
 
@@ -39,115 +41,163 @@ export default function Login() {
         e.preventDefault();
         setError('');
         setLoading(true);
-
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            navigate('/'); // App.jsx will route to the authenticated dashboard
+            navigate('/');
         } catch (err) {
-            setError(err.message || 'Invalid email or password.');
+            const msg = err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password'
+                ? 'Invalid email or password. Please try again.'
+                : err.message || 'Authentication failed.';
+            setError(msg);
             setLoading(false);
         }
     };
 
     return (
-        <div className="w-full min-h-screen bg-dark-900 flex items-center justify-center p-4 relative overflow-hidden">
-            {/* Background Effects */}
-            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-900/30 blur-[120px] rounded-full pointer-events-none"></div>
-            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/30 blur-[120px] rounded-full pointer-events-none"></div>
+        <div
+            className="w-full min-h-screen flex items-center justify-center relative overflow-hidden"
+            style={{ backgroundImage: `url(${randomBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+        >
+            {/* Overlay */}
+            <div className="absolute inset-0 bg-dark-900/85 backdrop-blur-sm z-0" />
+
+            {/* Ambient glows */}
+            <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary-600/20 rounded-full blur-[120px] pointer-events-none z-0" />
+            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-600/15 rounded-full blur-[120px] pointer-events-none z-0" />
 
             <AnimatePresence mode="wait">
                 {showIntro ? (
                     <motion.div
-                        key="intro-screen"
-                        className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-dark-900"
+                        key="intro"
+                        className="absolute inset-0 z-50 flex flex-col items-center justify-center"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0, scale: 2, filter: 'blur(15px)' }} // Teleport zoom effect
-                        transition={{ duration: 0.8, ease: "easeInOut" }}
+                        exit={{ opacity: 0, scale: 1.15, filter: 'blur(20px)' }}
+                        transition={{ duration: 0.9, ease: 'easeInOut' }}
                     >
-                        <motion.h1
-                            className="text-6xl md:text-7xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-t from-dark-800 via-slate-300 to-white pb-2 mb-4 drop-shadow-2xl"
-                            initial={{ y: 30, opacity: 0 }}
+                        <motion.div
+                            className="flex flex-col items-center gap-4"
+                            initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
-                            transition={{ duration: 0.8, delay: 0.3 }}
+                            transition={{ duration: 0.9, delay: 0.2, ease: 'easeOut' }}
                         >
-                            SiferTech
-                        </motion.h1>
+                            {/* Logo mark */}
+                            <motion.div
+                                className="w-20 h-20 rounded-3xl bg-primary-600/20 border border-primary-500/30 flex items-center justify-center mb-2"
+                                initial={{ scale: 0.5, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ duration: 0.6, delay: 0.1 }}
+                            >
+                                <Building2 size={40} className="text-primary-400" />
+                            </motion.div>
 
-                        <motion.p
-                            className="text-lg md:text-xl text-slate-400 italic font-medium max-w-xl text-center px-6"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ duration: 1, delay: 1 }}
-                        >
-                            "{randomQuote}"
-                        </motion.p>
+                            <h1 className="text-7xl md:text-8xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-slate-200 to-slate-500 drop-shadow-2xl">
+                                SiferTech
+                            </h1>
+                            <motion.p
+                                className="text-lg text-slate-400 italic font-medium max-w-md text-center px-6"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ duration: 1, delay: 1.2 }}
+                            >
+                                "{randomQuote}"
+                            </motion.p>
+                        </motion.div>
                     </motion.div>
                 ) : (
-                    <motion.div 
-                        key="main-screen"
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
-                        className="w-full max-w-md bg-dark-800/80 backdrop-blur-xl border border-dark-600/50 rounded-3xl shadow-2xl overflow-hidden relative z-10"
+                    <motion.div
+                        key="form"
+                        className="relative z-10 w-full max-w-md px-4"
+                        initial={{ opacity: 0, y: 24 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
                     >
-                        <div className="p-8">
-                            <div className="w-16 h-16 bg-primary-600/20 text-primary-500 rounded-2xl flex items-center justify-center mb-6 border border-primary-500/30 shadow-inner mx-auto">
-                                <Building2 size={32} />
-                            </div>
-                            <h1 className="text-3xl font-bold text-white mb-2 tracking-tight text-center">Access IMS Space</h1>
-                            <p className="text-slate-400 mb-8 font-medium text-center">
-                                Don't have an account?{' '}
-                                <Link to="/signup" className="text-primary-500 hover:text-primary-400 transition-colors">
-                                    Sign up instead
-                                </Link>
-                            </p>
-
-                            <form onSubmit={handleLogin} className="space-y-5">
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-300 mb-2">Email Address</label>
-                                    <input 
-                                        type="email" 
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        className="w-full bg-dark-900/50 border border-dark-600 rounded-xl px-4 py-3.5 text-white focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all shadow-inner"
-                                        placeholder="name@company.com"
-                                        required
-                                    />
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-300 mb-2">Password</label>
-                                    <input 
-                                        type="password" 
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full bg-dark-900/50 border border-dark-600 rounded-xl px-4 py-3.5 text-white focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all shadow-inner"
-                                        placeholder="••••••••"
-                                        required
-                                    />
+                        <div className="bg-dark-800/80 backdrop-blur-xl border border-dark-600/50 rounded-3xl shadow-2xl overflow-hidden">
+                            <div className="p-8">
+                                {/* Header */}
+                                <div className="flex flex-col items-center mb-8">
+                                    <div className="w-14 h-14 bg-primary-600/20 text-primary-400 rounded-2xl flex items-center justify-center mb-4 border border-primary-500/30">
+                                        <Building2 size={28} />
+                                    </div>
+                                    <h1 className="text-2xl font-bold text-white tracking-tight">Welcome back</h1>
+                                    <p className="text-slate-400 text-sm mt-1">
+                                        New here?{' '}
+                                        <Link to="/signup" className="text-primary-400 hover:text-primary-300 font-semibold transition-colors">
+                                            Create an account
+                                        </Link>
+                                    </p>
                                 </div>
 
-                                {error && (
-                                    <motion.div 
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: 'auto' }}
-                                        className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl flex items-start gap-3 text-sm"
+                                <form onSubmit={handleLogin} className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Email</label>
+                                        <input
+                                            type="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            className="w-full bg-dark-900/70 border border-dark-600 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50 transition-all placeholder:text-slate-600"
+                                            placeholder="name@company.com"
+                                            required
+                                            autoComplete="email"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Password</label>
+                                        <div className="relative">
+                                            <input
+                                                type={showPassword ? 'text' : 'password'}
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                className="w-full bg-dark-900/70 border border-dark-600 rounded-xl px-4 py-3 pr-12 text-white text-sm focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50 transition-all placeholder:text-slate-600"
+                                                placeholder="••••••••"
+                                                required
+                                                autoComplete="current-password"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(v => !v)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                                                tabIndex={-1}
+                                            >
+                                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <AnimatePresence>
+                                        {error && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl flex items-center gap-3 text-sm"
+                                            >
+                                                <ShieldAlert size={16} className="shrink-0" />
+                                                <p>{error}</p>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="w-full bg-primary-600 hover:bg-primary-500 text-white rounded-xl py-3 font-bold tracking-wide transition-all shadow-lg shadow-primary-600/20 flex items-center justify-center gap-2 group disabled:opacity-60 disabled:cursor-not-allowed mt-2"
                                     >
-                                        <ShieldAlert size={18} className="shrink-0 mt-0.5" />
-                                        <p>{error}</p>
-                                    </motion.div>
-                                )}
-
-                                <button 
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full bg-primary-600 hover:bg-primary-500 text-white rounded-xl py-3.5 font-bold tracking-wide transition-all shadow-lg hover:shadow-primary-500/25 flex items-center justify-center gap-2 group mt-2 disabled:opacity-50"
-                                >
-                                    {loading ? 'Authenticating...' : 'Sign In'}
-                                    {!loading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
-                                </button>
-                            </form>
+                                        {loading ? (
+                                            <span className="flex items-center gap-2">
+                                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                Signing in...
+                                            </span>
+                                        ) : (
+                                            <>
+                                                Sign In
+                                                <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                                            </>
+                                        )}
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     </motion.div>
                 )}

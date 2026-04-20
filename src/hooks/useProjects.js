@@ -52,6 +52,8 @@ export function useProjects() {
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 status: projectData.status || 'ongoing',
+                labels: projectData.labels || [],
+                dueDate: projectData.dueDate || null,
                 timeLogged: 0
             });
             return docRef.id;
