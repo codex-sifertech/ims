@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, collectionGroup, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import useStore from '../store/useStore';
 
 export function useGlobalTasks() {
@@ -180,12 +181,42 @@ export function useGlobalTasks() {
                 ...taskData,
                 type: 'company',
                 createdBy: user.uid,
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                subTasks: taskData.subTasks || [],
+                attachments: taskData.attachments || []
             });
         } catch (error) {
             console.error("Error adding company task:", error);
+            throw error; // Re-throw so the UI can catch it
         }
     };
 
-    return { addTask: addTaskToGlobal, addTaskToCompany, updateTask, deleteTask };
+    const uploadTaskAttachment = (file, onProgress) => {
+        return new Promise((resolve, reject) => {
+            if (!activeCompany?.id) return reject('No active company');
+            
+            const storageRef = ref(storage, `companies/${activeCompany.id}/tasks/${Date.now()}_${file.name}`);
+            const uploadTask = uploadBytesResumable(storageRef, file);
+
+            uploadTask.on('state_changed', 
+                (snapshot) => {
+                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    if (onProgress) onProgress(progress);
+                }, 
+                (error) => reject(error), 
+                () => {
+                    getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+                        resolve({
+                            name: file.name,
+                            url: downloadURL,
+                            type: file.type,
+                            size: file.size
+                        });
+                    });
+                }
+            );
+        });
+    };
+
+    return { addTask: addTaskToGlobal, addTaskToCompany, uploadTaskAttachment, updateTask, deleteTask };
 }

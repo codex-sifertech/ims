@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Loader2, Trash2, FolderOpen, MoreVertical, Search } from 'lucide-react';
+import { Plus, Loader2, Trash2, FolderOpen, MoreVertical, Search, Paperclip, ListTodo } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useGlobalTasks } from '../../hooks/useGlobalTasks';
 import useStore from '../../store/useStore';
@@ -217,6 +217,21 @@ export default function GlobalTaskBoard() {
                                                                         ? card.assignedTo.map(m => m.name).join(', ') 
                                                                         : (card.assignedTo || card.createdBy || 'UNASSIGNED')}
                                                                 </span>
+
+                                                                <div className="flex items-center gap-3">
+                                                                    {card.subTasks?.length > 0 && (
+                                                                        <div className="flex items-center gap-1 text-slate-600">
+                                                                            <ListTodo size={10} />
+                                                                            <span className="text-[9px] font-bold">{card.subTasks.filter(st => st.completed).length}/{card.subTasks.length}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {card.attachments?.length > 0 && (
+                                                                        <div className="flex items-center gap-1 text-slate-600">
+                                                                            <Paperclip size={10} />
+                                                                            <span className="text-[9px] font-bold">{card.attachments.length}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     )}

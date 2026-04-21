@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Loader2, Trash2, FolderOpen, MoreVertical, Search, User, Calendar, Flag, X, Check } from 'lucide-react';
+import { Plus, Loader2, Trash2, FolderOpen, MoreVertical, Search, User, Calendar, Flag, X, Check, Paperclip, ListTodo, PaperclipIcon } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useGlobalTasks } from '../../hooks/useGlobalTasks';
 import useStore from '../../store/useStore';
@@ -24,6 +24,34 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
     const [searchMember, setSearchMember] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [loading, setLoading] = useState(false);
+    const [subTasks, setSubTasks] = useState([]);
+    const [currentSubTask, setCurrentSubTask] = useState('');
+    const [attachments, setAttachments] = useState([]);
+    const [uploadProgress, setUploadProgress] = useState(null);
+    const { uploadTaskAttachment } = useGlobalTasks();
+
+    const addSubTask = () => {
+        if (!currentSubTask.trim()) return;
+        setSubTasks([...subTasks, { id: Date.now().toString(), text: currentSubTask.trim(), completed: false }]);
+        setCurrentSubTask('');
+    };
+
+    const removeSubTask = (id) => setSubTasks(subTasks.filter(st => st.id !== id));
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        try {
+            setUploadProgress(0);
+            const metadata = await uploadTaskAttachment(file, (p) => setUploadProgress(p));
+            setAttachments([...attachments, metadata]);
+        } catch (err) {
+            alert('File upload failed: ' + (err.message || err));
+        } finally {
+            setUploadProgress(null);
+        }
+    };
 
     const toggleMember = (member) => {
         setSelectedMembers(prev => 
@@ -49,11 +77,18 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
                 status: colId,
                 priority,
                 assignedTo: selectedMembers,
-                dueDate: dueDate || null
+                dueDate: dueDate || null,
+                subTasks,
+                attachments
             });
             setTitle('');
             setSelectedMembers([]);
+            setSubTasks([]);
+            setAttachments([]);
             onClose();
+        } catch (err) {
+            console.error("Task submission error:", err);
+            alert("FAILURE: Could not log task to ledger.\nREASON: " + (err.message || "Unknown error (likely permissions)."));
         } finally {
             setLoading(false);
         }
@@ -176,6 +211,74 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
                                             ))}
                                         </div>
                                     )}
+                                </div>
+                            </div>
+
+                            {/* Sub-tasks & Attachments - Grid row */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                        <ListTodo size={10} /> Operation Steps ({subTasks.length})
+                                    </label>
+                                    <div className="flex gap-1.5 focus-within:ring-1 focus-within:ring-primary-500 rounded-xl transition-all">
+                                        <input 
+                                            type="text"
+                                            value={currentSubTask}
+                                            onChange={e => setCurrentSubTask(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addSubTask())}
+                                            className="flex-1 bg-dark-800 border border-white/5 rounded-xl px-3 py-1.5 text-[10px] text-white font-bold outline-none placeholder:text-slate-700"
+                                            placeholder="Add step..."
+                                        />
+                                        <button type="button" onClick={addSubTask} className="w-8 h-8 bg-dark-800 border border-white/5 rounded-xl flex items-center justify-center text-slate-500 hover:text-primary-500 transition-all opacity-50 hover:opacity-100">
+                                            <Plus size={14} />
+                                        </button>
+                                    </div>
+                                    <div className="max-h-20 overflow-y-auto space-y-1 custom-scrollbar">
+                                        {subTasks.map(st => (
+                                            <div key={st.id} className="flex items-center justify-between p-1.5 bg-dark-800 rounded-lg border border-white/5 group">
+                                                <span className="text-[9px] text-slate-400 font-bold truncate pr-2">{st.text}</span>
+                                                <button type="button" onClick={() => removeSubTask(st.id)} className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100"><X size={10} /></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                        <Paperclip size={10} /> Data Assets ({attachments.length})
+                                    </label>
+                                    <div className="relative">
+                                        <input 
+                                            type="file" 
+                                            onChange={handleFileUpload}
+                                            className="hidden" 
+                                            id="task-file-upload" 
+                                        />
+                                        <label 
+                                            htmlFor="task-file-upload"
+                                            className="flex items-center justify-center gap-2 w-full py-1.5 bg-dark-800 border border-dashed border-white/10 rounded-xl text-[9px] font-black text-slate-500 hover:text-primary-400 hover:border-primary-500/30 cursor-pointer transition-all"
+                                        >
+                                            {uploadProgress !== null ? (
+                                                <div className="w-full px-2 flex items-center gap-2">
+                                                    <div className="h-1 bg-dark-700 rounded-full flex-1 overflow-hidden">
+                                                        <div className="h-full bg-primary-500 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                                                    </div>
+                                                    <span className="text-[8px] text-primary-500">{Math.round(uploadProgress)}%</span>
+                                                </div>
+                                            ) : (
+                                                <><Plus size={12} /> Attach Document</>
+                                            )}
+                                        </label>
+                                    </div>
+                                    <div className="max-h-20 overflow-y-auto space-y-1 custom-scrollbar">
+                                        {attachments.map((file, i) => (
+                                            <div key={i} className="flex items-center gap-2 p-1.5 bg-dark-800/50 rounded-lg border border-white/5">
+                                                <PaperclipIcon size={10} className="text-primary-500 shrink-0" />
+                                                <span className="text-[9px] text-slate-400 font-bold truncate flex-1">{file.name}</span>
+                                                <button type="button" onClick={() => setAttachments(attachments.filter((_, idx) => idx !== i))} className="text-slate-600 hover:text-red-400"><X size={10} /></button>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 
@@ -403,7 +506,22 @@ export default function CompanyKanban() {
                                                                             : (card.assignedTo || 'Unassigned')}
                                                                     </span>
                                                                 </div>
-                                                                <MoreVertical size={14} className="text-slate-600" />
+
+                                                                <div className="flex items-center gap-4">
+                                                                    {card.subTasks?.length > 0 && (
+                                                                        <div className="flex items-center gap-1 text-slate-500">
+                                                                            <ListTodo size={12} />
+                                                                            <span className="text-[10px] font-black">{card.subTasks.filter(st => st.completed).length}/{card.subTasks.length}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {card.attachments?.length > 0 && (
+                                                                        <div className="flex items-center gap-1 text-slate-500">
+                                                                            <Paperclip size={12} />
+                                                                            <span className="text-[10px] font-black">{card.attachments.length}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    <MoreVertical size={14} className="text-slate-600" />
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     )}
