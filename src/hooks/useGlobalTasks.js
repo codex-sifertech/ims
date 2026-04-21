@@ -95,6 +95,24 @@ export function useGlobalTasks() {
         }, (err) => console.error("Error fetching projects for tasks:", err));
         
         unsubscribes.push(unsubProjects);
+        
+        // 3. Listen to Company Root Tasks (General tasks not tied to a specific project)
+        const companyTasksRef = collection(db, 'companies', activeCompany.id, 'tasks');
+        const unsubCompanyTasks = onSnapshot(companyTasksRef, (snap) => {
+            snap.docs.forEach(doc => {
+                allTasks.set(doc.ref.path, { 
+                    id: doc.id, 
+                    ...doc.data(), 
+                    _path: doc.ref.path,
+                    isCompanyTask: true // Tag it for easier filtering in UI
+                });
+            });
+            snap.docChanges().forEach(change => {
+                if (change.type === 'removed') allTasks.delete(change.doc.ref.path);
+            });
+            updateState();
+        }, (err) => console.error("Error fetching company tasks:", err));
+        unsubscribes.push(unsubCompanyTasks);
 
         return () => {
             unsubscribes.forEach(unsub => unsub());
@@ -154,5 +172,19 @@ export function useGlobalTasks() {
         }
     };
 
-    return { addTask: addTaskToGlobal, updateTask, deleteTask };
+    const addTaskToCompany = async (taskData) => {
+        if (!activeCompany?.id) return;
+        try {
+            const tasksRef = collection(db, 'companies', activeCompany.id, 'tasks');
+            await addDoc(tasksRef, {
+                ...taskData,
+                createdBy: user.uid,
+                createdAt: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error("Error adding company task:", error);
+        }
+    };
+
+    return { addTask: addTaskToGlobal, addTaskToCompany, updateTask, deleteTask };
 }

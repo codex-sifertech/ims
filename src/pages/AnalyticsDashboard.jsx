@@ -14,6 +14,7 @@ import useStore from '../store/useStore';
 import { useProjects } from '../hooks/useProjects';
 import AIChatWidget from '../components/dashboard/AIChatWidget';
 import { format, subDays, startOfWeek, eachDayOfInterval } from 'date-fns';
+import CompanyKanban from '../components/dashboard/CompanyKanban';
 
 const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -274,6 +275,11 @@ export default function AnalyticsDashboard() {
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Company Kanban Dashboard Section */}
+                            <div className="mt-8">
+                                <CompanyKanban />
                             </div>
                         </>
                     )}

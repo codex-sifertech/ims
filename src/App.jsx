@@ -18,6 +18,8 @@ import Meetings from './pages/Meetings';
 import CompanySelection from './pages/CompanySelection';
 import CompanySettings from './pages/CompanySettings';
 import AdminPanel from './pages/AdminPanel';
+import PeopleHR from './pages/PeopleHR';
+import MemberDetails from './pages/MemberDetails';
 
 import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
@@ -171,6 +173,8 @@ function App() {
           <Route path="chat" element={<Inbox />} />
           <Route path="ai" element={<AIEcosystem />} />
           <Route path="meetings" element={<Meetings />} />
+          <Route path="people" element={<PeopleHR />} />
+          <Route path="people/:memberId" element={<MemberDetails />} />
           <Route path="settings" element={<CompanySettings />} />
           <Route path="admin" element={<AdminPanel />} />
         </Route>

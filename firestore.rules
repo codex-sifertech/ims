@@ -134,6 +134,11 @@ service cloud.firestore {
       match /dashboard/{docId} {
         allow read, write: if isCompanyMember(companyId);
       }
+
+      // Company-level tasks
+      match /tasks/{taskId} {
+        allow read, write: if isCompanyMember(companyId);
+      }
     }
 
     // ── Global chat rooms (company-scoped with room ID) ────────────────────

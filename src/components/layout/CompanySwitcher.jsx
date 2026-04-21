@@ -4,7 +4,7 @@ import useStore from '../../store/useStore';
 import { Building2, ChevronDown, Plus, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function CompanySwitcher() {
+export default function CompanySwitcher({ isCollapsed }) {
     const { user, activeCompany, setActiveCompany, companies } = useStore();
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
@@ -28,21 +28,26 @@ export default function CompanySwitcher() {
             {/* Trigger */}
             <button
                 onClick={() => setOpen(v => !v)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-dark-700/60 hover:bg-dark-700 border border-dark-600/50 text-left transition-all group"
+                className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} gap-2 px-3 py-2 rounded-xl bg-dark-700/60 hover:bg-dark-700 border border-dark-600/50 text-left transition-all group`}
+                title={isCollapsed ? activeCompany?.name : ''}
             >
                 <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-600/40 to-indigo-600/30 border border-primary-500/20 flex items-center justify-center text-white text-xs font-bold shrink-0">
                         {activeCompany?.name?.charAt(0)?.toUpperCase() || '?'}
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-white text-sm font-semibold truncate">{activeCompany?.name || 'No Workspace'}</p>
-                        <p className="text-slate-500 text-[10px] truncate">Workspace</p>
-                    </div>
+                    {!isCollapsed && (
+                        <div className="min-w-0">
+                            <p className="text-white text-sm font-semibold truncate">{activeCompany?.name || 'No Workspace'}</p>
+                            <p className="text-slate-500 text-[10px] truncate">Workspace</p>
+                        </div>
+                    )}
                 </div>
-                <ChevronDown
-                    size={14}
-                    className={`text-slate-500 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-                />
+                {!isCollapsed && (
+                    <ChevronDown
+                        size={14}
+                        className={`text-slate-500 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+                    />
+                )}
             </button>
 
             {/* Dropdown */}

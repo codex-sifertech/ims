@@ -19,8 +19,9 @@ const useStore = create((set) => ({
     globalTasks: [], 
     tasksLoading: true,
 
-    // Theme State
+    // Theme & Sidebar State
     theme: localStorage.getItem('ims_theme') || 'dark',
+    isSidebarCollapsed: localStorage.getItem('ims_sidebar_collapsed') === 'true',
 
     // Actions
     setTheme: (theme) => {
@@ -31,6 +32,10 @@ const useStore = create((set) => ({
             document.body.classList.remove('theme-light');
         }
         set({ theme });
+    },
+    setSidebarCollapsed: (collapsed) => {
+        localStorage.setItem('ims_sidebar_collapsed', collapsed);
+        set({ isSidebarCollapsed: collapsed });
     },
     setUser: (user) => set({ user, isLoading: false }),
     setLoading: (isLoading) => set({ isLoading }),
