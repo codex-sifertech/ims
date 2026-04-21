@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Loader2, Trash2, FolderOpen, MoreVertical, Search, User, Calendar, Flag, X, Check } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useGlobalTasks } from '../../hooks/useGlobalTasks';
 import useStore from '../../store/useStore';
-import { doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { format, addDays, isSameDay } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,12 +17,26 @@ const COLUMNS = [
 
 const PRIORITIES = ['Low', 'Medium', 'High'];
 
-function NewTaskModal({ isOpen, onClose, onAdd, colId }) {
+function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
     const [title, setTitle] = useState('');
     const [priority, setPriority] = useState('Medium');
-    const [assignee, setAssignee] = useState('');
+    const [selectedMembers, setSelectedMembers] = useState([]);
+    const [searchMember, setSearchMember] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [loading, setLoading] = useState(false);
+
+    const toggleMember = (member) => {
+        setSelectedMembers(prev => 
+            prev.find(m => m.id === member.id)
+                ? prev.filter(m => m.id !== member.id)
+                : [...prev, { id: member.id, name: member.name, photoURL: member.photoURL }]
+        );
+    };
+
+    const filteredMembers = members.filter(m => 
+        m.name?.toLowerCase().includes(searchMember.toLowerCase()) ||
+        m.email?.toLowerCase().includes(searchMember.toLowerCase())
+    );
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -34,10 +48,11 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId }) {
                 title: title.trim(),
                 status: colId,
                 priority,
-                assignedTo: assignee.trim(),
+                assignedTo: selectedMembers,
                 dueDate: dueDate || null
             });
             setTitle('');
+            setSelectedMembers([]);
             onClose();
         } finally {
             setLoading(false);
@@ -110,18 +125,59 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId }) {
                                         ))}
                                     </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Entity</label>
-                                    <div className="bg-dark-800 rounded-2xl border border-white/5 flex items-center px-4">
-                                        <User size={14} className="text-slate-500" />
-                                        <input
-                                            type="text"
-                                            value={assignee}
-                                            onChange={e => setAssignee(e.target.value)}
-                                            placeholder="Assignee Name/Log"
-                                            className="w-full bg-transparent border-none p-3.5 text-xs text-white font-bold outline-none placeholder:text-slate-700"
-                                        />
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Entities ({selectedMembers.length})</label>
+                                    
+                                    <div className="bg-dark-800 rounded-2xl border border-white/5 overflow-hidden">
+                                        <div className="p-3 border-b border-white/5 flex items-center gap-3">
+                                            <Search size={14} className="text-slate-500" />
+                                            <input 
+                                                type="text"
+                                                placeholder="Search team members..."
+                                                value={searchMember}
+                                                onChange={e => setSearchMember(e.target.value)}
+                                                className="bg-transparent border-none text-xs text-white font-bold outline-none placeholder:text-slate-700 w-full"
+                                            />
+                                        </div>
+                                        
+                                        <div className="max-h-48 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                            {filteredMembers.map(member => {
+                                                const isSelected = selectedMembers.find(m => m.id === member.id);
+                                                return (
+                                                    <button
+                                                        key={member.id}
+                                                        type="button"
+                                                        onClick={() => toggleMember(member)}
+                                                        className={`w-full flex items-center justify-between p-2 rounded-xl transition-all ${
+                                                            isSelected ? 'bg-primary-500/10 border border-primary-500/20' : 'hover:bg-dark-700 border border-transparent'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-7 h-7 rounded-lg bg-dark-900 border border-white/5 flex items-center justify-center text-slate-500 overflow-hidden text-[10px] font-black font-bold uppercase">
+                                                                {member.photoURL ? <img src={member.photoURL} className="w-full h-full object-cover" /> : member.name?.charAt(0)}
+                                                            </div>
+                                                            <div className="text-left">
+                                                                <p className="text-[11px] font-black text-white">{member.name}</p>
+                                                                <p className="text-[9px] font-bold text-slate-500 lowercase">{member.role || 'Member'}</p>
+                                                            </div>
+                                                        </div>
+                                                        {isSelected && <Check size={14} className="text-primary-500" />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
+                                    
+                                    {selectedMembers.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 pt-2">
+                                            {selectedMembers.map(m => (
+                                                <span key={m.id} className="text-[9px] px-2 py-1 bg-dark-700 text-slate-400 rounded-lg border border-white/5 font-black uppercase tracking-widest flex items-center gap-2">
+                                                    {m.name}
+                                                    <button type="button" onClick={() => toggleMember(m)} className="hover:text-red-400"><X size={10} /></button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -187,6 +243,16 @@ export default function CompanyKanban() {
     const { globalTasks, tasksLoading, activeCompany } = useStore();
     const { addTaskToCompany, deleteTask } = useGlobalTasks();
     const [isAddingCard, setIsAddingCard] = useState(null);
+    const [members, setMembers] = useState([]);
+
+    useEffect(() => {
+        if (!activeCompany?.id) return;
+        const membersRef = collection(db, 'companies', activeCompany.id, 'members');
+        const unsub = onSnapshot(membersRef, (snap) => {
+            setMembers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+        return unsub;
+    }, [activeCompany?.id]);
 
     const onDragEnd = async (result) => {
         if (!result.destination) return;
@@ -315,11 +381,28 @@ export default function CompanyKanban() {
 
                                                             <div className="flex items-center justify-between pt-5 border-t border-white/5">
                                                                 <div className="flex items-center gap-3">
-                                                                    <div className="w-8 h-8 rounded-xl bg-dark-900 flex items-center justify-center text-slate-400 border border-white/5 overflow-hidden text-[10px] font-black uppercase group-hover:border-primary-500/30 transition-colors">
-                                                                        {card.assignedTo?.charAt(0) || <User size={14} />}
+                                                                    <div className="flex -space-x-2 overflow-hidden">
+                                                                        {Array.isArray(card.assignedTo) && card.assignedTo.length > 0 ? (
+                                                                            card.assignedTo.slice(0, 3).map((m, i) => (
+                                                                                <div key={m.id || i} className="w-8 h-8 rounded-xl bg-dark-900 border-2 border-dark-800 flex items-center justify-center text-slate-400 overflow-hidden text-[9px] font-black uppercase shadow-lg ring-1 ring-white/5">
+                                                                                    {m.photoURL ? <img src={m.photoURL} className="w-full h-full object-cover" /> : m.name?.charAt(0) || <User size={12} />}
+                                                                                </div>
+                                                                            ))
+                                                                        ) : (
+                                                                            <div className="w-8 h-8 rounded-xl bg-dark-900 border border-white/5 flex items-center justify-center text-slate-400 text-[10px] font-black uppercase">
+                                                                                <User size={14} />
+                                                                            </div>
+                                                                        )}
+                                                                        {Array.isArray(card.assignedTo) && card.assignedTo.length > 3 && (
+                                                                            <div className="w-8 h-8 rounded-xl bg-dark-900 border-2 border-dark-800 flex items-center justify-center text-slate-500 text-[9px] font-black uppercase shadow-lg ring-1 ring-white/5">
+                                                                                +{card.assignedTo.length - 3}
+                                                                            </div>
+                                                                        )}
                                                                     </div>
-                                                                    <span className="text-[10px] text-slate-500 font-black tracking-widest uppercase group-hover:text-slate-300 transition-colors">
-                                                                        {card.assignedTo || 'Unassigned'}
+                                                                    <span className="text-[10px] text-slate-500 font-black tracking-widest uppercase group-hover:text-slate-300 transition-colors truncate max-w-[120px]">
+                                                                        {Array.isArray(card.assignedTo) 
+                                                                            ? (card.assignedTo.length > 0 ? card.assignedTo.map(m => m.name).join(', ') : 'Unassigned')
+                                                                            : (card.assignedTo || 'Unassigned')}
                                                                     </span>
                                                                 </div>
                                                                 <MoreVertical size={14} className="text-slate-600" />
@@ -349,6 +432,7 @@ export default function CompanyKanban() {
             <NewTaskModal 
                 isOpen={isAddingCard !== null}
                 colId={isAddingCard}
+                members={members}
                 onClose={() => setIsAddingCard(null)}
                 onAdd={handleAddCard}
             />

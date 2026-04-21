@@ -178,6 +178,7 @@ export function useGlobalTasks() {
             const tasksRef = collection(db, 'companies', activeCompany.id, 'tasks');
             await addDoc(tasksRef, {
                 ...taskData,
+                type: 'company',
                 createdBy: user.uid,
                 createdAt: new Date().toISOString()
             });

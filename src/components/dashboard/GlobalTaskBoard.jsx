@@ -41,6 +41,9 @@ export default function GlobalTaskBoard() {
     };
 
     const getProjectLabel = (task) => {
+        if (task.type === 'company') {
+            return { label: 'Company Work', colorClass: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/20' };
+        }
         if (!task.projectTitle) return null;
         const colorClass = getProjectColorClass(task.projectTitle);
         return { label: task.projectTitle, colorClass };
@@ -86,12 +89,16 @@ export default function GlobalTaskBoard() {
     const filteredTasks = useMemo(() => {
         if (!searchQuery.trim()) return globalTasks;
         const q = searchQuery.toLowerCase();
-        return globalTasks.filter(t => 
-            t.title?.toLowerCase().includes(q) || 
-            t.projectTitle?.toLowerCase().includes(q) ||
-            t.assignedTo?.toLowerCase().includes(q) ||
-            t.tags?.some(tag => tag.toLowerCase().includes(q))
-        );
+        return globalTasks.filter(t => {
+            const assigneeMatch = Array.isArray(t.assignedTo) 
+                ? t.assignedTo.some(m => m.name?.toLowerCase().includes(q))
+                : t.assignedTo?.toLowerCase().includes(q);
+            
+            return t.title?.toLowerCase().includes(q) || 
+                t.projectTitle?.toLowerCase().includes(q) ||
+                assigneeMatch ||
+                t.tags?.some(tag => tag.toLowerCase().includes(q));
+        });
     }, [globalTasks, searchQuery]);
 
     if (tasksLoading) {
@@ -205,8 +212,10 @@ export default function GlobalTaskBoard() {
                                                             )}
 
                                                             <div className="flex items-center justify-between mt-3 pt-2 border-t border-dark-800">
-                                                                <span className="text-[9px] text-slate-600 font-bold tracking-wider">
-                                                                    {card.assignedTo || card.createdBy || 'UNASSIGNED'}
+                                                                <span className="text-[9px] text-slate-600 font-bold tracking-wider truncate max-w-full">
+                                                                    {Array.isArray(card.assignedTo) && card.assignedTo.length > 0 
+                                                                        ? card.assignedTo.map(m => m.name).join(', ') 
+                                                                        : (card.assignedTo || card.createdBy || 'UNASSIGNED')}
                                                                 </span>
                                                             </div>
                                                         </div>
