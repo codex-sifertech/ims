@@ -65,9 +65,13 @@ export default function PeopleHR() {
     const memberStats = useMemo(() => {
         return members.map(member => {
             const memberLogs = attendance.filter(log => log.userId === member.id);
-            const todayLog = memberLogs.find(log => isToday(new Date(log.timestamp)));
+            const todayLogs = memberLogs
+                .filter(log => isToday(new Date(log.timestamp)))
+                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             
-            // Calculate Current Streak (Simplified: consecutive days with at least one log in the last 7 days)
+            const latestLogToday = todayLogs[0];
+            
+            // Calculate Current Streak (Simplified: consecutive days with at least one log in the last 30 days)
             let streak = 0;
             const now = new Date();
             for (let i = 0; i < 30; i++) {
@@ -75,7 +79,7 @@ export default function PeopleHR() {
                 checkDate.setDate(now.getDate() - i);
                 const hasLog = memberLogs.some(log => isSameDay(new Date(log.timestamp), checkDate));
                 if (hasLog) streak++;
-                else if (i > 0) break; // Break streak if missing a day (except possibly today if not yet logged)
+                else if (i > 0) break; // Break streak if missing a day
             }
 
             // Total Hours this Month
@@ -86,11 +90,25 @@ export default function PeopleHR() {
                 ...member,
                 streak,
                 hours,
-                status: todayLog ? (todayLog.type === 'check-in' ? 'active' : 'checked-out') : 'offline',
+                status: latestLogToday ? (latestLogToday.type === 'check-in' ? 'active' : 'checked-out') : 'offline',
                 lastSeen: memberLogs.length > 0 ? format(new Date(memberLogs[0].timestamp), 'MMM dd, HH:mm') : 'Never'
             };
         });
     }, [members, attendance]);
+
+    // Aggregate Company Stats
+    const companyStats = useMemo(() => {
+        if (!memberStats.length) return { avgHours: 0, highStreak: 0, retention: 0 };
+        
+        const totalHours = memberStats.reduce((acc, m) => acc + parseFloat(m.hours), 0);
+        const avgHours = (totalHours / memberStats.length).toFixed(1);
+        const highStreak = Math.max(...memberStats.map(m => m.streak));
+        
+        const activeThisMonth = memberStats.filter(m => parseFloat(m.hours) > 0).length;
+        const retention = ((activeThisMonth / members.length) * 100).toFixed(0);
+
+        return { avgHours, highStreak, retention };
+    }, [memberStats, members.length]);
 
     const filteredMembers = useMemo(() => {
         if (!searchQuery) return memberStats;
@@ -140,10 +158,10 @@ export default function PeopleHR() {
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
                 {[
-                    { label: 'Avg Monthly Hours', value: '164.5', icon: Timer, color: 'text-primary-500' },
-                    { label: 'Company streak', value: '12 Days', icon: Flame, color: 'text-orange-500' },
-                    { label: 'Retention rate', value: '98%', icon: Zap, color: 'text-yellow-500' },
-                    { label: 'Top Performer', value: members[0]?.name || 'N/A', icon: Trophy, color: 'text-purple-500' },
+                    { label: 'Avg Monthly Hours', value: companyStats.avgHours, icon: Timer, color: 'text-primary-500' },
+                    { label: 'Company High Streak', value: `${companyStats.highStreak} Days`, icon: Flame, color: 'text-orange-500' },
+                    { label: 'Retention rate', value: `${companyStats.retention}%`, icon: Zap, color: 'text-yellow-500' },
+                    { label: 'Top Performer', value: [...memberStats].sort((a,b) => b.hours - a.hours)[0]?.name || 'N/A', icon: Trophy, color: 'text-purple-500' },
                 ].map((stat, i) => (
                     <div key={i} className="bg-dark-800/40 border border-white/5 p-6 rounded-[2rem] backdrop-blur-sm">
                         <div className="flex items-center justify-between mb-4">

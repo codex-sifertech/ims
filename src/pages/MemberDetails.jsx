@@ -49,9 +49,12 @@ export default function MemberDetails() {
         const unsubRows = onSnapshot(q, (snap) => {
             setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
+        }, (err) => {
+            console.error("Failed to fetch logs:", err);
+            setLoading(false); // End loading even if query fails
         });
 
-        getMember();
+        getMember().catch(() => setLoading(false));
         return () => unsubRows();
     }, [activeCompany?.id, memberId]);
 
