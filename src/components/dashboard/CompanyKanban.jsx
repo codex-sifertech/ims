@@ -84,30 +84,29 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
                     className="relative w-full max-w-xl bg-dark-900 border border-white/5 rounded-[3rem] shadow-2xl overflow-hidden shadow-black/50"
                 >
-                    <div className="p-8">
-                        <div className="flex items-center justify-between mb-8">
-                            <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Provision Task Log</h3>
+                    <div className="p-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                        <div className="flex items-center justify-between mb-5">
+                            <h3 className="text-xl font-black text-white uppercase tracking-tighter">Provision Task Log</h3>
                             <button onClick={onClose} className="p-2 border border-white/5 rounded-2xl text-slate-500 hover:text-white hover:bg-dark-800 transition-all">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Task Description</label>
+                            <div className="space-y-1.5">
+                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Task Description</label>
                                 <textarea
                                     autoFocus
                                     value={title}
                                     onChange={e => setTitle(e.target.value)}
-                                    className="w-full bg-dark-800 border border-white/5 rounded-3xl p-5 text-lg text-white font-black placeholder:text-slate-700 focus:border-primary-500/50 outline-none transition-all resize-none"
+                                    className="w-full bg-dark-800 border border-white/5 rounded-2xl p-4 text-base text-white font-black placeholder:text-slate-700 focus:border-primary-500/50 outline-none transition-all resize-none"
                                     placeholder="What needs to be logged?"
-                                    rows={3}
+                                    rows={2}
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Priority Matrix</label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Priority Matrix</label>
                                     <div className="flex bg-dark-800 p-1.5 rounded-2xl border border-white/5 gap-1">
                                         {PRIORITIES.map(p => (
                                             <button
@@ -123,24 +122,23 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
                                                 {p}
                                             </button>
                                         ))}
-                                    </div>
                                 </div>
-                                <div className="space-y-4">
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Entities ({selectedMembers.length})</label>
+                                <div className="space-y-2.5">
+                                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Entities ({selectedMembers.length})</label>
                                     
                                     <div className="bg-dark-800 rounded-2xl border border-white/5 overflow-hidden">
-                                        <div className="p-3 border-b border-white/5 flex items-center gap-3">
-                                            <Search size={14} className="text-slate-500" />
+                                        <div className="p-2.5 border-b border-white/5 flex items-center gap-2">
+                                            <Search size={12} className="text-slate-500" />
                                             <input 
                                                 type="text"
                                                 placeholder="Search team members..."
                                                 value={searchMember}
                                                 onChange={e => setSearchMember(e.target.value)}
-                                                className="bg-transparent border-none text-xs text-white font-bold outline-none placeholder:text-slate-700 w-full"
+                                                className="bg-transparent border-none text-[11px] text-white font-bold outline-none placeholder:text-slate-700 w-full"
                                             />
                                         </div>
                                         
-                                        <div className="max-h-48 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                        <div className="max-h-32 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
                                             {filteredMembers.map(member => {
                                                 const isSelected = selectedMembers.find(m => m.id === member.id);
                                                 return (
@@ -169,11 +167,11 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
                                     </div>
                                     
                                     {selectedMembers.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 pt-2">
+                                        <div className="flex flex-wrap gap-1.5 pt-1.5">
                                             {selectedMembers.map(m => (
-                                                <span key={m.id} className="text-[9px] px-2 py-1 bg-dark-700 text-slate-400 rounded-lg border border-white/5 font-black uppercase tracking-widest flex items-center gap-2">
+                                                <span key={m.id} className="text-[8px] px-2 py-0.5 bg-dark-700 text-slate-400 rounded-lg border border-white/5 font-black uppercase tracking-widest flex items-center gap-1.5">
                                                     {m.name}
-                                                    <button type="button" onClick={() => toggleMember(m)} className="hover:text-red-400"><X size={10} /></button>
+                                                    <button type="button" onClick={() => toggleMember(m)} className="hover:text-red-400"><X size={8} /></button>
                                                 </span>
                                             ))}
                                         </div>
@@ -181,19 +179,19 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
                                 </div>
                             </div>
 
-                            <div className="space-y-4">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex justify-between items-center">
+                            <div className="space-y-2.5">
+                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 flex justify-between items-center">
                                     Deadline Selection 
-                                    <span className="text-[9px] text-primary-500 lowercase font-bold">{dueDate || 'No deadline set'}</span>
+                                    <span className="text-[8px] text-primary-500 lowercase font-bold">{dueDate || 'No deadline set'}</span>
                                 </label>
                                 
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-3 gap-2.5">
                                     {quickDates.map(qd => (
                                         <button
                                             key={qd.label}
                                             type="button"
                                             onClick={() => setDueDate(qd.value)}
-                                            className={`py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                                            className={`py-2 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${
                                                 dueDate === qd.value 
                                                     ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shadow-emerald-500/10 shadow-lg' 
                                                     : 'bg-dark-800 text-slate-500 border-white/5 hover:border-white/10'
@@ -209,26 +207,26 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
                                         type="date"
                                         value={dueDate}
                                         onChange={e => setDueDate(e.target.value)}
-                                        className="w-full bg-dark-800 border border-white/5 rounded-2xl p-4 text-[10px] text-white font-black uppercase tracking-[0.2em] outline-none focus:border-primary-500/50 appearance-none"
+                                        className="w-full bg-dark-800 border border-white/5 rounded-xl p-3 text-[9px] text-white font-black uppercase tracking-[0.2em] outline-none focus:border-primary-500/50 appearance-none"
                                     />
-                                    <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={16} />
+                                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={12} />
                                 </div>
                             </div>
 
-                            <div className="pt-6 flex gap-4">
+                            <div className="pt-4 flex gap-4">
                                 <button
                                     type="button"
                                     onClick={onClose}
-                                    className="flex-1 py-4 bg-dark-800 hover:bg-dark-700 text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] rounded-3xl transition-all"
+                                    className="flex-1 py-3 bg-dark-800 hover:bg-dark-700 text-slate-400 text-[9px] font-black uppercase tracking-[0.3em] rounded-2xl transition-all"
                                 >
                                     Abort Process
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={!title.trim() || loading}
-                                    className="flex-[2] py-4 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-3xl transition-all shadow-2xl shadow-primary-600/30 flex items-center justify-center gap-3"
+                                    className="flex-[2] py-3 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-[0.3em] rounded-2xl transition-all shadow-2xl shadow-primary-600/30 flex items-center justify-center gap-3"
                                 >
-                                    {loading ? <Loader2 className="animate-spin" size={18} /> : <>Commit to Ledger <Check size={18} /></>}
+                                    {loading ? <Loader2 className="animate-spin" size={14} /> : <>Commit to Ledger <Check size={14} /></>}
                                 </button>
                             </div>
                         </form>
