@@ -20,7 +20,18 @@ export default function ScreenShareViewer({ projectId }) {
     const [error, setError] = useState('');
     const videoRef = useRef(null);
     const [showAccessMenu, setShowAccessMenu] = useState(false);
+    const [members, setMembers] = useState([]);
     const menuRef = useRef(null);
+
+    // Sync company members for access control
+    useEffect(() => {
+        if (!activeCompany?.id) return;
+        const membersRef = collection(db, 'companies', activeCompany.id, 'members');
+        const unsub = onSnapshot(membersRef, (snap) => {
+            setMembers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+        return () => unsub();
+    }, [activeCompany?.id]);
 
     const activeStream = activeStreams[currentStreamIndex] || activeStreams[0];
     const isMyStreamSharing = activeStreams.some(s => s.id === user?.id);
@@ -63,10 +74,10 @@ export default function ScreenShareViewer({ projectId }) {
 
     const togglePiP = async () => {
         try {
-            if (videoRef.current !== document.pictureInPictureElement) {
-                await videoRef.current.requestPictureInPicture();
-            } else {
+            if (document.pictureInPictureElement) {
                 await document.exitPictureInPicture();
+            } else if (videoRef.current) {
+                await videoRef.current.requestPictureInPicture();
             }
         } catch (error) {
             console.error('PiP failed', error);
@@ -116,36 +127,50 @@ export default function ScreenShareViewer({ projectId }) {
                                     ${grantedUser ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-dark-800 border-dark-600 text-slate-300 hover:text-white hover:bg-dark-700'}`}
                             >
                                 <ShieldCheck size={16} />
-                                {grantedUser ? `Control: ${grantedUser.name}` : 'Grant Access'}
+                                {grantedUser ? 'Control Active' : 'Grant Access'}
                                 <ChevronDown size={14} className={`transition-transform duration-300 ${showAccessMenu ? 'rotate-180' : ''}`} />
                             </button>
 
                             {showAccessMenu && (
-                                <div className="absolute right-0 mt-2 w-56 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                <div className="absolute right-0 mt-2 w-64 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
                                     <div className="p-3 border-b border-dark-700 bg-dark-900/50">
-                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Share Control</p>
+                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Grant Remote Control</p>
                                     </div>
-                                    <div className="p-1">
+                                    <div className="p-2 space-y-1">
                                         <button 
                                             onClick={() => { setGrantedUser(null); setShowAccessMenu(false); }}
                                             className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-dark-700 text-slate-300 transition-colors group"
                                         >
-                                            <span className="text-xs font-semibold group-hover:text-white transition-colors">No Access</span>
+                                            <span className="text-xs font-semibold group-hover:text-white transition-colors">Revoke All Access</span>
                                             {!grantedUser && <CheckCircle2 size={14} className="text-emerald-500" />}
                                         </button>
-                                        {/* Mock users for the menu */}
-                                        {['Team Alpha', 'Project Manager', 'Lead Dev'].map(name => (
-                                            <button 
-                                                key={name}
-                                                onClick={() => { setGrantedUser({ name }); setShowAccessMenu(false); }}
-                                                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-dark-700 text-slate-300 transition-colors group"
+                                        {members.length > 0 ? members.map((m) => (
+                                            <button
+                                                key={m.id}
+                                                onClick={() => {
+                                                    setGrantedUser(m.id === grantedUser ? null : m.id);
+                                                    setShowAccessMenu(false);
+                                                }}
+                                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
+                                                    grantedUser === m.id 
+                                                    ? 'bg-primary-500/20 border-primary-500 text-primary-400' 
+                                                    : 'bg-dark-800 border-white/5 text-slate-400 hover:text-white hover:bg-dark-700'
+                                                }`}
                                             >
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-semibold group-hover:text-white transition-colors">{name}</span>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-dark-900 border border-white/5 flex items-center justify-center text-[10px] font-black uppercase overflow-hidden">
+                                                        {m.photoURL ? <img src={m.photoURL} alt="" /> : m.name?.charAt(0)}
+                                                    </div>
+                                                    <div className="text-left">
+                                                        <p className="text-xs font-black uppercase tracking-tight">{m.name || 'Anonymous'}</p>
+                                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{m.role || 'Member'}</p>
+                                                    </div>
                                                 </div>
-                                                {grantedUser?.name === name && <CheckCircle2 size={14} className="text-emerald-500" />}
+                                                {grantedUser === m.id && <Check size={14} />}
                                             </button>
-                                        ))}
+                                        )) : (
+                                            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest text-center py-4">No active nodes detected</p>
+                                        )}
                                     </div>
                                 </div>
                             )}

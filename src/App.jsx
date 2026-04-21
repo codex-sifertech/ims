@@ -20,6 +20,7 @@ import CompanySettings from './pages/CompanySettings';
 import AdminPanel from './pages/AdminPanel';
 import PeopleHR from './pages/PeopleHR';
 import MemberDetails from './pages/MemberDetails';
+import GlobalFloatingStream from './components/shared/GlobalFloatingStream';
 
 import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
@@ -66,16 +67,21 @@ function App() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
+            const isMaster = firebaseUser.email === 'sifertech.co@gmail.com';
             const userData = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            role: 'owner', // Default role for their own workspace
-            name: firebaseUser.displayName || firebaseUser.email.split('@')[0] || 'User'
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              role: isMaster ? 'master_admin' : 'member',
+              name: firebaseUser.displayName || firebaseUser.email.split('@')[0] || 'User'
             };
             
             setUser(userData);
+
+            // Update user document with master role if applicable
+            const userDocRef = doc(db, 'users', firebaseUser.uid);
+            await setDoc(userDocRef, userData, { merge: true });
             
             // Fetch real companies from Firestore
             const companiesRef = collection(db, 'companies');
@@ -151,6 +157,30 @@ function App() {
 
     return () => unsubscribe();
   }, [setLoading, setCompanies, setUser, setActiveCompany]);
+  
+  // Presence/Active Status Sync
+  useEffect(() => {
+    if (!user?.uid || !activeCompany?.id) return;
+
+    const syncStatus = async () => {
+      try {
+        const memberRef = doc(db, 'companies', activeCompany.id, 'members', user.uid);
+        await setDoc(memberRef, {
+          status: 'online',
+          lastActive: new Date().toISOString(),
+          name: user.name || user.email,
+          photoURL: user.photoURL || null
+        }, { merge: true });
+      } catch (err) {
+        console.error("Presence sync failed:", err);
+      }
+    };
+
+    syncStatus();
+    // Keep alive every 5 minutes
+    const interval = setInterval(syncStatus, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user?.uid, activeCompany?.id]);
 
   return (
     <Router>
@@ -182,6 +212,7 @@ function App() {
         {/* Catch-all redirect */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      <GlobalFloatingStream />
     </Router>
   );
 }

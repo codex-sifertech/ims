@@ -41,18 +41,24 @@ export default function PeopleHR() {
         });
 
         // 2. Fetch Attendance (Current Month)
-        const start = startOfMonth(new Date());
-        const end = endOfMonth(new Date());
         const attendanceRef = collection(db, 'companies', activeCompany.id, 'attendance');
+        // Standardize on isoDate for easier JS-side range filtering if server timestamps are pending
+        const start = startOfMonth(new Date()).toISOString();
+        const end = endOfMonth(new Date()).toISOString();
+        
         const attendanceQuery = query(
             attendanceRef,
-            where('timestamp', '>=', start.toISOString()),
-            where('timestamp', '<=', end.toISOString())
+            where('isoDate', '>=', start),
+            where('isoDate', '<=', end),
+            orderBy('isoDate', 'desc')
         );
 
         const unsubAttendance = onSnapshot(attendanceQuery, (snap) => {
             const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setAttendance(data);
+            setLoading(false);
+        }, (err) => {
+            console.error("Attendance feed error:", err);
             setLoading(false);
         });
 
@@ -90,8 +96,11 @@ export default function PeopleHR() {
                 ...member,
                 streak,
                 hours,
-                status: latestLogToday ? (latestLogToday.type === 'check-in' ? 'active' : 'checked-out') : 'offline',
-                lastSeen: memberLogs.length > 0 ? format(new Date(memberLogs[0].timestamp), 'MMM dd, HH:mm') : 'Never'
+                // Status now comes directly from the member document for real-time accuracy, 
+                // but we fallback to logs if it's missing
+                status: member.status || (latestLogToday ? (latestLogToday.type === 'check-in' ? 'active' : 'checked-out') : 'offline'),
+                lastSeen: member.lastSeen ? format(member.lastSeen.toDate ? member.lastSeen.toDate() : new Date(member.lastSeen), 'MMM dd, HH:mm') 
+                         : (memberLogs.length > 0 ? format(new Date(memberLogs[0].timestamp?.toDate ? memberLogs[0].timestamp.toDate() : memberLogs[0].isoDate || memberLogs[0].timestamp), 'MMM dd, HH:mm') : 'Never')
             };
         });
     }, [members, attendance]);

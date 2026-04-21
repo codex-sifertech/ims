@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTimeTracker } from '../hooks/useTimeTracker';
 import {
@@ -8,8 +8,10 @@ import {
 import { 
     Activity, Users, Target, CheckCircle2, TrendingUp, Sparkles, 
     LogIn, LogOut, Briefcase, DollarSign, Megaphone, Home,
-    AlertCircle, Clock, CheckCircle, Boxes
+    AlertCircle, Clock, CheckCircle, Boxes, UserCircle2
 } from 'lucide-react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
 import useStore from '../store/useStore';
 import { useProjects } from '../hooks/useProjects';
 import AIChatWidget from '../components/dashboard/AIChatWidget';
@@ -26,14 +28,35 @@ export default function AnalyticsDashboard() {
     
     const activeTab = searchParams.get('tab') || 'home';
 
+    const [members, setMembers] = useState([]);
+    const [loadingMembers, setLoadingMembers] = useState(true);
+
+    // Fetch and sync members for Eco Load
+    useEffect(() => {
+        if (!activeCompany?.id) return;
+        const membersRef = collection(db, 'companies', activeCompany.id, 'members');
+        const unsub = onSnapshot(membersRef, (snap) => {
+            setMembers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setLoadingMembers(false);
+        });
+        return () => unsub();
+    }, [activeCompany?.id]);
+
     // Compute Metrics from Real Data
     const stats = useMemo(() => {
         const totalProjects = projects.length;
         const activeProjects = projects.filter(p => p.status === 'ongoing' || p.status === 'active').length;
         const completedProjects = projects.filter(p => p.status === 'completed').length;
         
-        const totalTasks = globalTasks.length;
-        const completedTasks = globalTasks.filter(t => t.status === 'done' || t.status === 'completed').length;
+        // Filter tasks only for the active company if they are tagged
+        const companyTasks = globalTasks.filter(t => !t.companyId || t.companyId === activeCompany?.id);
+        
+        const totalTasks = companyTasks.length;
+        const completedTasks = companyTasks.filter(t => 
+            t.status?.toLowerCase() === 'done' || 
+            t.status?.toLowerCase() === 'completed' ||
+            t.status?.toLowerCase() === 'finished'
+        ).length;
         const pendingTasks = totalTasks - completedTasks;
         
         const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -147,26 +170,69 @@ export default function AnalyticsDashboard() {
                                     <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 blur-3xl rounded-full -mr-10 -mt-10"></div>
                                     <div className="flex items-center justify-between mb-4">
                                         <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-2xl flex items-center justify-center border border-amber-500/10">
-                                            <Clock size={22} />
+                                            <AlertCircle size={22} />
                                         </div>
-                                        <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-1 rounded-lg">{stats.pendingTasks} Left</span>
+                                        <span className="text-[10px] font-black text-rose-500 bg-rose-500/10 px-2 py-1 rounded-lg">High</span>
                                     </div>
                                     <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Pending Tasks</p>
-                                    <h3 className="text-3xl font-black text-white mt-1 tabular-nums">{stats.totalTasks}</h3>
+                                    <h3 className="text-3xl font-black text-white mt-1 tabular-nums">{stats.pendingTasks}</h3>
                                 </div>
 
-                                <div className="bg-dark-800/50 border border-dark-700/50 p-6 rounded-3xl group hover:border-indigo-500/30 transition-all relative overflow-hidden backdrop-blur-sm">
-                                    <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 blur-3xl rounded-full -mr-10 -mt-10"></div>
+                                <div className="bg-dark-800/50 border border-dark-700/50 p-6 rounded-3xl group hover:border-blue-500/30 transition-all relative overflow-hidden backdrop-blur-sm">
+                                    <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 blur-3xl rounded-full -mr-10 -mt-10"></div>
                                     <div className="flex items-center justify-between mb-4">
-                                        <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-2xl flex items-center justify-center border border-indigo-500/10">
-                                            <Boxes size={22} />
+                                        <div className="w-12 h-12 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center border border-blue-500/10">
+                                            <Users size={22} />
                                         </div>
-                                        <div className="flex -space-x-2">
-                                            {[1,2,3].map(i => <div key={i} className="w-6 h-6 rounded-full border-2 border-dark-800 bg-slate-600"></div>)}
-                                        </div>
+                                        <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg">Active</span>
                                     </div>
-                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Eco Load</p>
-                                    <h3 className="text-3xl font-black text-white mt-1 tabular-nums">Active</h3>
+                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Active Members</p>
+                                    <h3 className="text-3xl font-black text-white mt-1 tabular-nums">{members.filter(m => m.status === 'active' || m.isCheckedIn).length}</h3>
+                                </div>
+                            </div>
+
+                            {/* Eco Load Card */}
+                            <div className="bg-dark-800/40 border border-white/5 rounded-[3rem] p-8 backdrop-blur-md">
+                                <div className="flex items-center justify-between mb-8">
+                                    <div>
+                                        <h3 className="text-xl font-black text-white uppercase tracking-tight">Eco Load</h3>
+                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Real-time status & presence</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">
+                                            {members.filter(m => m.status === 'active' || m.isCheckedIn).length} Online
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="flex -space-x-4 mb-8">
+                                    {members.slice(0, 5).map((m) => (
+                                        <div key={m.id} className={`w-12 h-12 rounded-2xl bg-dark-700 border-2 border-dark-800 flex items-center justify-center overflow-hidden transition-transform hover:-translate-y-1 relative group/member`}>
+                                            {m.photoURL ? (
+                                                <img src={m.photoURL} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-slate-500">
+                                                    <UserCircle2 size={24} />
+                                                </div>
+                                            )}
+                                            {/* Status Dot */}
+                                            <div className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-dark-900 ${
+                                                (m.status === 'active' || m.isCheckedIn) ? 'bg-emerald-500' : 'bg-slate-600'
+                                            }`} />
+                                            
+                                            {/* Tooltip */}
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 bg-dark-950 border border-white/10 rounded-xl opacity-0 group-hover/member:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                                                <p className="text-[10px] font-black text-white uppercase">{m.name || 'Anonymous'}</p>
+                                                <p className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.1em]">{m.role || 'Member'}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {members.length > 5 && (
+                                        <div className="w-12 h-12 rounded-2xl bg-primary-500/10 border-2 border-dark-800 flex items-center justify-center text-primary-500 text-[10px] font-black">
+                                            +{members.length - 5}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

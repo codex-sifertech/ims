@@ -32,10 +32,24 @@ export default function MemberDetails() {
 
         // Fetch Member Data
         const getMember = async () => {
-            const memberRef = doc(db, 'companies', activeCompany.id, 'members', memberId);
-            const snap = await getDoc(memberRef);
-            if (snap.exists()) setMember({ id: snap.id, ...snap.data() });
-            else navigate('/people');
+            try {
+                const memberRef = doc(db, 'companies', activeCompany.id, 'members', memberId);
+                const snap = await getDoc(memberRef);
+                if (snap.exists()) {
+                    setMember({ id: snap.id, ...snap.data() });
+                } else {
+                    // Fallback: If not in members sub-collection, check global users (though it should be in members)
+                    const userRef = doc(db, 'users', memberId);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        setMember({ id: userSnap.id, ...userSnap.data(), role: 'Member' });
+                    } else {
+                        navigate('/people');
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching member:", err);
+            }
         };
 
         // Fetch Member Attendance Logs
@@ -43,15 +57,19 @@ export default function MemberDetails() {
         const q = query(
             logsRef, 
             where('userId', '==', memberId),
-            orderBy('timestamp', 'desc')
+            orderBy('isoDate', 'desc')
         );
 
         const unsubRows = onSnapshot(q, (snap) => {
-            setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            setLogs(snap.docs.map(d => ({ 
+                id: d.id, 
+                ...d.data(),
+                timestamp: d.data().isoDate || d.data().timestamp // Handle both
+            })));
             setLoading(false);
         }, (err) => {
             console.error("Failed to fetch logs:", err);
-            setLoading(false); // End loading even if query fails
+            setLoading(false);
         });
 
         getMember().catch(() => setLoading(false));

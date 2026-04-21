@@ -28,31 +28,37 @@ export function useTimeTracker() {
         if (!user?.uid || !activeCompany?.id) return;
 
         const newStatus = !isCheckedIn;
+        const statusString = newStatus ? 'active' : 'checked-out';
 
-        // Optimistic local update first so UI responds instantly
+        // Optimistic local update
         toggleCheckIn(newStatus);
 
         const settingsRef = doc(db, 'users', user.uid, 'settings', 'attendance');
+        const memberRef = doc(db, 'companies', activeCompany.id, 'members', user.uid);
+        const attendanceRef = collection(db, 'companies', activeCompany.id, 'attendance');
 
         try {
-            // Persist to Firestore
+            // Persist to User Settings
             await setDoc(settingsRef, { isCheckedIn: newStatus }, { merge: true });
 
-            // Log the attendance event
-            const today = new Date().toISOString().split('T')[0];
-            const logsRef = collection(
-                db, 'companies', activeCompany.id, 'attendance', today, 'logs'
-            );
+            // Update Member Status for Real-time presence (Eco Load)
+            await setDoc(memberRef, { 
+                status: statusString,
+                isCheckedIn: newStatus,
+                lastSeen: serverTimestamp() 
+            }, { merge: true });
 
-            await addDoc(logsRef, {
+            // Log flat attendance event for easier querying
+            await addDoc(attendanceRef, {
                 userId: user.uid,
                 userName: user.name || user.email,
                 type: newStatus ? 'check-in' : 'check-out',
-                timestamp: serverTimestamp()
+                timestamp: serverTimestamp(),
+                // Add ISO string for browser-side date filtering if serverTimestamp is messy
+                isoDate: new Date().toISOString()
             });
         } catch (error) {
             console.error('Error toggling check-in:', error);
-            // Revert optimistic update on failure
             toggleCheckIn(!newStatus);
         }
     }, [user, activeCompany, isCheckedIn, toggleCheckIn]);
