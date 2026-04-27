@@ -127,7 +127,7 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
                                 <X size={20} />
                             </button>
                         </div>
-
+                        <form onSubmit={handleSubmit} className="space-y-5">
                             <div className="space-y-1.5">
                                 <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Task Description</label>
                                 <textarea
@@ -158,6 +158,7 @@ function NewTaskModal({ isOpen, onClose, onAdd, colId, members }) {
                                                 {p}
                                             </button>
                                         ))}
+                                    </div>
                                 </div>
                                 <div className="space-y-2.5">
                                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Entities ({selectedMembers.length})</label>

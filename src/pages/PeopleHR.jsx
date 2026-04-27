@@ -197,7 +197,8 @@ export default function PeopleHR() {
     }
 
     return (
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        <>
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             {/* Header Area */}
             <div className="mb-12 flex items-center justify-between">
                 <div>
@@ -451,6 +452,6 @@ export default function PeopleHR() {
                     onClose={()=>setDrillMember(null)}
                 />
             )}
-        </div>
+        </>
     );
 }
