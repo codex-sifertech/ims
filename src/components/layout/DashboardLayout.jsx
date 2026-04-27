@@ -8,6 +8,7 @@ import GlobalTimeTracker from './GlobalTimeTracker';
 import { useState } from 'react';
 import { useGlobalTasks } from '../../hooks/useGlobalTasks';
 import { useTimeTracker } from '../../hooks/useTimeTracker';
+import { useOnlinePresence } from '../../hooks/useOnlinePresence';
 
 export default function DashboardLayout() {
     const { user, theme, setTheme, isSidebarCollapsed, setSidebarCollapsed } = useStore();
@@ -17,6 +18,7 @@ export default function DashboardLayout() {
     // Initialize Global Persistence Hooks
     useGlobalTasks();
     useTimeTracker();
+    useOnlinePresence();
 
 
     const navItems = [

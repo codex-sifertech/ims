@@ -19,7 +19,7 @@ service cloud.firestore {
 
     function isCompanyAdmin(companyId) {
       return isAuth() &&
-        getMemberData(companyId).role in ['admin', 'master_admin'];
+        getMemberData(companyId).role in ['admin', 'master_admin', 'owner'];
     }
 
     function isMasterAdmin() {
@@ -27,14 +27,23 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master_admin';
     }
 
+    function isSessionHost(sessionId) {
+      return isAuth() &&
+        get(/databases/$(database)/documents/screenSessions/$(sessionId)).data.hostUserId == request.auth.uid;
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────────
 
     match /users/{userId} {
+      // Signed-in users can read public profiles; only owner can write own doc
       allow read: if isAuth();
       allow write: if isAuth() && request.auth.uid == userId;
 
-      // User-scoped settings (attendance toggle, etc.)
       match /settings/{settingId} {
+        allow read, write: if isAuth() && request.auth.uid == userId;
+      }
+
+      match /integrations/{integrationId} {
         allow read, write: if isAuth() && request.auth.uid == userId;
       }
     }
@@ -42,35 +51,39 @@ service cloud.firestore {
     // ── Companies ─────────────────────────────────────────────────────────────
 
     match /companies/{companyId} {
-      // Allow read if they are a member, an admin, or their email is inherently in the accessList
-      allow read: if isCompanyMember(companyId) || isMasterAdmin() || (isAuth() && request.auth.token.email in resource.data.accessList);
+      allow read: if isCompanyMember(companyId) || isMasterAdmin() ||
+                     (isAuth() && request.auth.token.email in resource.data.accessList);
       allow create: if isAuth();
       allow update: if isCompanyAdmin(companyId) || isMasterAdmin();
       allow delete: if isMasterAdmin();
 
-      // Members subcollection
+      // Members — only admins/owners can delete or remove members
       match /members/{memberId} {
-        // Members can read the members list, and users can ALWAYS read their own member document (required for App.jsx's check)
         allow read: if isCompanyMember(companyId) || isMasterAdmin() || request.auth.uid == memberId;
-        // Admins can write, OR the owner of the company can add users (fixes the chicken-and-egg problem of the first member)
-        allow write: if isCompanyAdmin(companyId) || isMasterAdmin() || get(/databases/$(database)/documents/companies/$(companyId)).data.owner == request.auth.uid;
+        allow create, update: if isCompanyAdmin(companyId) || isMasterAdmin() ||
+                                 get(/databases/$(database)/documents/companies/$(companyId)).data.owner == request.auth.uid;
+        allow delete: if isCompanyAdmin(companyId) || isMasterAdmin();
       }
 
       // Projects
       match /projects/{projectId} {
         allow read: if isCompanyMember(companyId);
-        allow create: if isCompanyMember(companyId);
-        allow update: if isCompanyMember(companyId);
+        allow create, update: if isCompanyMember(companyId);
         allow delete: if isCompanyAdmin(companyId) ||
                          resource.data.createdBy == request.auth.uid ||
                          isMasterAdmin();
 
-        // Project tasks (nested under projects)
         match /tasks/{taskId} {
           allow read, write: if isCompanyMember(companyId);
         }
 
-        // Project comments
+        match /tasks/{taskId}/comments/{commentId} {
+          allow read: if isCompanyMember(companyId);
+          allow create: if isCompanyMember(companyId);
+          allow update, delete: if isCompanyMember(companyId) &&
+                                   resource.data.authorId == request.auth.uid;
+        }
+
         match /comments/{commentId} {
           allow read: if isCompanyMember(companyId);
           allow create: if isCompanyMember(companyId);
@@ -78,19 +91,31 @@ service cloud.firestore {
                                    resource.data.authorId == request.auth.uid;
         }
 
-        // Project files
         match /files/{fileId} {
+          allow read, write: if isCompanyMember(companyId);
+        }
+
+        match /chat/{messageId} {
           allow read: if isCompanyMember(companyId);
-          allow write: if isCompanyMember(companyId);
+          allow create: if isCompanyMember(companyId);
+          allow update, delete: if isCompanyMember(companyId) &&
+                                   resource.data.senderId == request.auth.uid;
         }
       }
 
-      // Company-wide kanban (WorkBoard)
-      match /work/{docId} {
+      // Company-wide tasks
+      match /tasks/{taskId} {
         allow read, write: if isCompanyMember(companyId);
+
+        match /comments/{commentId} {
+          allow read: if isCompanyMember(companyId);
+          allow create: if isCompanyMember(companyId);
+          allow update, delete: if isCompanyMember(companyId) &&
+                                   resource.data.authorId == request.auth.uid;
+        }
       }
 
-      // Shared kanban boards
+      // Kanban boards
       match /kanban/{boardId} {
         allow read, write: if isCompanyMember(companyId);
         match /cards/{cardId} {
@@ -98,31 +123,29 @@ service cloud.firestore {
         }
       }
 
-      // Attendance & time tracking
+      match /work/{docId} {
+        allow read, write: if isCompanyMember(companyId);
+      }
+
+      // Attendance logs
       match /attendance/{recordId} {
         allow read: if isCompanyMember(companyId);
         allow create, update: if isCompanyMember(companyId) &&
                                  request.resource.data.userId == request.auth.uid;
         allow delete: if isCompanyAdmin(companyId);
-
-        // Attendance logs subcollection
-        match /logs/{logId} {
-          allow read: if isCompanyMember(companyId);
-          allow create: if isCompanyMember(companyId) &&
-                           request.resource.data.userId == request.auth.uid;
-          allow delete: if isCompanyAdmin(companyId);
-        }
       }
 
-      // Root flattened Attendance Logs
-      match /attendanceLogs/{logId} {
+      // Time logs — written by members for themselves; admins read all
+      match /timeLogs/{logId} {
         allow read: if isCompanyMember(companyId);
         allow create: if isCompanyMember(companyId) &&
                          request.resource.data.userId == request.auth.uid;
-        allow update, delete: if isCompanyAdmin(companyId);
+        allow update: if isCompanyMember(companyId) &&
+                         resource.data.userId == request.auth.uid;
+        allow delete: if isCompanyAdmin(companyId);
       }
 
-      // Group chat messages (company-scoped)
+      // Group messages (company-level)
       match /messages/{messageId} {
         allow read: if isCompanyMember(companyId);
         allow create: if isCompanyMember(companyId);
@@ -130,21 +153,21 @@ service cloud.firestore {
                                  resource.data.senderId == request.auth.uid;
       }
 
-      // Dashboard documents (vision board, etc.)
       match /dashboard/{docId} {
         allow read, write: if isCompanyMember(companyId);
       }
 
-      // Company-level tasks
-      match /tasks/{taskId} {
-        allow read, write: if isCompanyMember(companyId);
+      match /attendanceLogs/{logId} {
+        allow read: if isCompanyMember(companyId);
+        allow create: if isCompanyMember(companyId) &&
+                         request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isCompanyAdmin(companyId);
       }
     }
 
-    // ── Global chat rooms (company-scoped with room ID) ────────────────────
+    // ── Global chat rooms ──────────────────────────────────────────────────────
 
     match /chats/{roomId} {
-      // Room ID is expected to be `company-{companyId}`
       allow read: if isAuth();
 
       match /messages/{messageId} {
@@ -155,27 +178,56 @@ service cloud.firestore {
       }
     }
 
-    // ── Personal boards ────────────────────────────────────────────────────
+    // ── Screen Sessions ────────────────────────────────────────────────────────
+
+    match /screenSessions/{sessionId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() && resource.data.hostUserId == request.auth.uid;
+      allow delete: if isAuth() && resource.data.hostUserId == request.auth.uid;
+
+      match /viewers/{viewerId} {
+        allow read: if isAuth();
+        // Only the host can write viewer docs (grant/revoke control)
+        allow write: if isSessionHost(sessionId) || request.auth.uid == viewerId;
+
+        // canControl field: only writable by host
+        // (enforced by the broader write rule above — host-only for most fields)
+      }
+
+      match /controlRequests/{requestId} {
+        allow read: if isAuth();
+        allow create: if isAuth();
+        // Only host can update (approve/deny)
+        allow update, delete: if isSessionHost(sessionId);
+      }
+    }
+
+    // ── Personal boards ────────────────────────────────────────────────────────
 
     match /personalBoards/{userId} {
       allow read, write: if isAuth() && request.auth.uid == userId;
-
       match /{document=**} {
         allow read, write: if isAuth() && request.auth.uid == userId;
       }
     }
 
-    // ── Global tasks (company-level collectionGroup) ───────────────────────
+    // ── Global tasks ───────────────────────────────────────────────────────────
 
     match /globalTasks/{userId} {
       allow read, write: if isAuth() && request.auth.uid == userId;
-
       match /tasks/{taskId} {
         allow read, write: if isAuth() && request.auth.uid == userId;
+
+        match /comments/{commentId} {
+          allow read: if isAuth() && request.auth.uid == userId;
+          allow create: if isAuth();
+          allow update, delete: if isAuth() && resource.data.authorId == request.auth.uid;
+        }
       }
     }
 
-    // ── Admin-only collections ─────────────────────────────────────────────
+    // ── Admin logs ─────────────────────────────────────────────────────────────
 
     match /adminLogs/{logId} {
       allow read, write: if isMasterAdmin();

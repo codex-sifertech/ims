@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { Plus, MoreVertical, Loader2, Trash2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useProjectTasks } from '../../hooks/useProjectTasks';
+import TaskDetailPanel from '../shared/TaskDetailPanel';
 
 export default function ProjectInternalKanban({ projectId }) {
     const { tasks, loading, addTask, updateTask, deleteTask } = useProjectTasks(projectId);
     const [columns, setColumns] = useState([]);
-    const [isAddingCard, setIsAddingCard] = useState(null); // column id
+    const [isAddingCard, setIsAddingCard] = useState(null);
     const [newCardTitle, setNewCardTitle] = useState('');
+    const [selectedTask, setSelectedTask] = useState(null);
 
     useEffect(() => {
         const newCols = [
@@ -98,7 +100,8 @@ export default function ProjectInternalKanban({ projectId }) {
                                                         ref={provided.innerRef}
                                                         {...provided.draggableProps}
                                                         {...provided.dragHandleProps}
-                                                        className={`bg-dark-900 p-4 rounded-xl border group transition-all ${
+                                                        onClick={() => setSelectedTask(card)}
+                                                        className={`bg-dark-900 p-4 rounded-xl border group transition-all cursor-pointer ${
                                                             snapshot.isDragging 
                                                                 ? 'border-primary-500 shadow-2xl shadow-primary-500/20 rotate-1 scale-[1.02]' 
                                                                 : 'border-dark-700 hover:border-dark-600 hover:shadow-lg'
@@ -182,6 +185,15 @@ export default function ProjectInternalKanban({ projectId }) {
                     ))}
                 </div>
             </DragDropContext>
+
+            {selectedTask && (
+                <TaskDetailPanel
+                    task={selectedTask}
+                    members={[]}
+                    onClose={() => setSelectedTask(null)}
+                    onUpdate={(updates) => setSelectedTask(t => ({ ...t, ...updates }))}
+                />
+            )}
         </div>
     );
 }

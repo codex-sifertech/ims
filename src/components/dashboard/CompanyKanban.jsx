@@ -7,6 +7,7 @@ import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { format, addDays, isSameDay } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import TaskDetailPanel from '../shared/TaskDetailPanel';
 
 const COLUMNS = [
     { id: 'todo',        title: 'To Do',       dot: 'bg-slate-500' },
@@ -345,6 +346,7 @@ export default function CompanyKanban() {
     const { addTaskToCompany, deleteTask } = useGlobalTasks();
     const [isAddingCard, setIsAddingCard] = useState(null);
     const [members, setMembers] = useState([]);
+    const [selectedTask, setSelectedTask] = useState(null);
 
     useEffect(() => {
         if (!activeCompany?.id) return;
@@ -445,7 +447,8 @@ export default function CompanyKanban() {
                                                             ref={provided.innerRef}
                                                             {...provided.draggableProps}
                                                             {...provided.dragHandleProps}
-                                                            className={`bg-dark-800/80 backdrop-blur-sm p-6 rounded-3xl border transition-all duration-300 group ${
+                                                            onClick={() => setSelectedTask(card)}
+                                                            className={`bg-dark-800/80 backdrop-blur-sm p-6 rounded-3xl border transition-all duration-300 group cursor-pointer ${
                                                                 snapshot.isDragging
                                                                     ? 'border-primary-500 shadow-[0_40px_80px_rgba(0,0,0,0.5)] rotate-2 scale-[1.05] z-50'
                                                                     : 'border-white/5 hover:border-primary-500/30 hover:bg-dark-800 shadow-xl shadow-transparent hover:shadow-black/20'
@@ -552,6 +555,15 @@ export default function CompanyKanban() {
                 onClose={() => setIsAddingCard(null)}
                 onAdd={handleAddCard}
             />
+
+            {selectedTask && (
+                <TaskDetailPanel
+                    task={selectedTask}
+                    members={members}
+                    onClose={() => setSelectedTask(null)}
+                    onUpdate={(updates) => setSelectedTask(t => ({ ...t, ...updates }))}
+                />
+            )}
         </>
     );
 }

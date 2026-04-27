@@ -5,6 +5,7 @@ import { useGlobalTasks } from '../../hooks/useGlobalTasks';
 import useStore from '../../store/useStore';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
+import TaskDetailPanel from '../shared/TaskDetailPanel';
 
 const COLUMNS = [
     { id: 'todo',        title: 'To Do',       dot: 'bg-slate-500' },
@@ -31,6 +32,7 @@ export default function GlobalTaskBoard() {
     const [newCardPriority, setNewCardPriority] = useState('Medium');
     const [newCardAssignee, setNewCardAssignee] = useState('');
     const [newCardTags, setNewCardTags] = useState('');
+    const [selectedTask, setSelectedTask] = useState(null);
 
     const getProjectColorClass = (title) => {
         if (!title) return PROJECT_COLORS[0];
@@ -163,7 +165,8 @@ export default function GlobalTaskBoard() {
                                                             ref={provided.innerRef}
                                                             {...provided.draggableProps}
                                                             {...provided.dragHandleProps}
-                                                            className={`bg-dark-900 p-4 rounded-xl border group transition-all ${
+                                                            onClick={() => setSelectedTask(card)}
+                                                            className={`bg-dark-900 p-4 rounded-xl border group transition-all cursor-pointer ${
                                                                 snapshot.isDragging
                                                                     ? 'border-primary-500 shadow-2xl shadow-primary-500/20 rotate-1 scale-[1.02]'
                                                                     : 'border-dark-700 hover:border-dark-600 hover:shadow-lg'
@@ -306,6 +309,15 @@ export default function GlobalTaskBoard() {
                     ))}
                 </div>
             </DragDropContext>
+
+            {selectedTask && (
+                <TaskDetailPanel
+                    task={selectedTask}
+                    members={[]}
+                    onClose={() => setSelectedTask(null)}
+                    onUpdate={(updates) => setSelectedTask(t => ({ ...t, ...updates }))}
+                />
+            )}
         </div>
     );
 }

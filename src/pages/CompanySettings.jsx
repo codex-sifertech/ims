@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
-import { Shield, UserPlus, Loader2, Trash2, Mail } from 'lucide-react';
+import { Shield, UserPlus, Loader2, Trash2, Mail, Plug } from 'lucide-react';
+import GoogleCalendarConnect from '../components/shared/GoogleCalendarConnect';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function CompanySettings() {
@@ -312,6 +313,24 @@ export default function CompanySettings() {
                             </div>
                         )}
                     </div>
+                </div>
+            </div>
+
+            {/* ── INTEGRATIONS ── */}
+            <div className="mt-8 bg-dark-800/60 backdrop-blur-md border border-dark-700 rounded-2xl overflow-hidden shadow-xl">
+                <div className="p-6 border-b border-dark-700 bg-dark-800">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <Plug size={18} className="text-primary-400" />
+                        Integrations
+                    </h2>
+                    <p className="text-sm text-slate-400 mt-1">Connect external services to sync data automatically.</p>
+                </div>
+                <div className="p-6 flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-bold text-white">Google Calendar</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Sync task due dates as calendar events in your Google Calendar.</p>
+                    </div>
+                    <GoogleCalendarConnect />
                 </div>
             </div>
         </div>
