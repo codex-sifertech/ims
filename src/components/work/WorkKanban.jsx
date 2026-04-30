@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { Plus, MoreVertical, Loader2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useWorkKanban } from '../../hooks/useWorkKanban';
+import TaskDetailPanel from '../shared/TaskDetailPanel';
 
 export default function WorkKanban() {
     const { columns, loading, updateColumns } = useWorkKanban();
     const [isAddingCard, setIsAddingCard] = useState(null); // column id
     const [newCardTitle, setNewCardTitle] = useState('');
+    const [selectedTask, setSelectedTask] = useState(null);
 
     const onDragEnd = (result) => {
         if (!result.destination) return;
@@ -81,6 +83,7 @@ export default function WorkKanban() {
                                                         ref={provided.innerRef}
                                                         {...provided.draggableProps}
                                                         {...provided.dragHandleProps}
+                                                        onClick={() => setSelectedTask(card)}
                                                         style={{ ...provided.draggableProps.style }}
                                                         className={`bg-dark-700 p-3 rounded-lg border shadow-sm transition-colors ${snapshot.isDragging ? 'border-primary-500 opacity-80 rotate-2 scale-105' : 'border-dark-600 hover:border-slate-500'
                                                             }`}
@@ -98,30 +101,9 @@ export default function WorkKanban() {
                                         ))}
                                         {provided.placeholder}
 
-                                        {isAddingCard === col.id ? (
-                                            <form onSubmit={(e) => handleAddCard(e, col.id)} className="mt-2 text-left">
-                                                <textarea
-                                                    autoFocus
-                                                    value={newCardTitle}
-                                                    onChange={(e) => setNewCardTitle(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                                            e.preventDefault();
-                                                            handleAddCard(e, col.id);
-                                                        }
-                                                        if (e.key === 'Escape') setIsAddingCard(null);
-                                                    }}
-                                                    className="w-full bg-dark-900 border border-primary-500 rounded-lg p-2 text-sm text-white resize-none focus:outline-none"
-                                                    placeholder="Task title..."
-                                                    rows={2}
-                                                />
-                                                <div className="flex gap-2 mt-2">
-                                                    <button type="submit" className="px-3 py-1 bg-primary-600 text-white text-xs rounded-md hover:bg-primary-500 font-medium">Add Task</button>
-                                                </div>
-                                            </form>
-                                        ) : (
+                                        {false ? null : (
                                             <button
-                                                onClick={() => setIsAddingCard(col.id)}
+                                                onClick={() => setSelectedTask({ id: '', title: '', status: col.id, priority: 'Medium', tags: [] })}
                                                 className="w-full py-2 flex items-center justify-center gap-2 text-sm text-slate-500 hover:text-white hover:bg-dark-700 rounded-lg transition-colors border border-dashed border-dark-600 mt-2"
                                             >
                                                 <Plus size={14} /> Add Task
@@ -135,6 +117,40 @@ export default function WorkKanban() {
                     ))}
                 </div>
             </DragDropContext>
+        
+            {selectedTask && (
+                <TaskDetailPanel
+                    task={selectedTask}
+                    members={[]}
+                    onClose={() => setSelectedTask(null)}
+                    onUpdate={(updates) => {
+                        // For Work Kanban, updates are local to columns array
+                        if (selectedTask.id) {
+                            const newCols = columns.map(col => {
+                                const newCards = col.cards.map(c => c.id === selectedTask.id ? { ...c, ...updates } : c);
+                                return { ...col, cards: newCards };
+                            });
+                            updateColumns(newCols);
+                            setSelectedTask(t => ({...t, ...updates}));
+                        } else {
+                            setSelectedTask(t => ({...t, ...updates}));
+                        }
+                    }}
+                    onCreate={(taskData) => {
+                        const newCols = columns.map(col => {
+                            if (col.id === taskData.status) {
+                                return {
+                                    ...col,
+                                    cards: [...col.cards, { id: `wcard-${Date.now()}`, ...taskData }]
+                                };
+                            }
+                            return col;
+                        });
+                        updateColumns(newCols);
+                        setSelectedTask(null);
+                    }}
+                />
+            )}
         </div>
     );
 }
