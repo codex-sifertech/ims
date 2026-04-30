@@ -74,7 +74,7 @@ export default function ProjectInternalKanban({ projectId }) {
             <DragDropContext onDragEnd={onDragEnd}>
                 <div className="flex-1 flex gap-4 overflow-x-auto pb-4 custom-scrollbar min-h-0">
                     {columns.map(col => (
-                        <div key={col.id} className="min-w-[300px] w-[300px] bg-dark-800/50 rounded-2xl border border-dark-800 flex flex-col max-h-full">
+                        <div key={col.id} className="min-w-[300px] w-[300px] bg-dark-800/40 backdrop-blur-xl rounded-2xl border border-white/5 flex flex-col max-h-full shadow-lg">
                             <div className="p-4 border-b border-dark-800 flex items-center justify-between">
                                 <h3 className="font-bold text-white text-sm flex items-center gap-2">
                                     <div className={`w-2 h-2 rounded-full ${col.id === 'done' ? 'bg-emerald-500' : col.id === 'todo' ? 'bg-slate-500' : 'bg-amber-500'}`} />
@@ -101,7 +101,7 @@ export default function ProjectInternalKanban({ projectId }) {
                                                         {...provided.draggableProps}
                                                         {...provided.dragHandleProps}
                                                         onClick={() => setSelectedTask(card)}
-                                                        className={`bg-dark-900 p-4 rounded-xl border group transition-all cursor-pointer ${
+                                                        className={`bg-dark-900/80 backdrop-blur-md p-4 rounded-xl border border-white/5 group transition-all cursor-pointer shadow-sm hover:bg-white/[0.02] ${
                                                             snapshot.isDragging 
                                                                 ? 'border-primary-500 shadow-2xl shadow-primary-500/20 rotate-1 scale-[1.02]' 
                                                                 : 'border-dark-700 hover:border-dark-600 hover:shadow-lg'
@@ -141,38 +141,9 @@ export default function ProjectInternalKanban({ projectId }) {
                                         ))}
                                         {provided.placeholder}
 
-                                        {isAddingCard === col.id ? (
-                                            <form onSubmit={(e) => handleAddCard(e, col.id)} className="mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                                                <div className="bg-dark-900 p-3 rounded-xl border border-primary-500/50 shadow-lg shadow-primary-500/5">
-                                                    <textarea
-                                                        autoFocus
-                                                        value={newCardTitle}
-                                                        onChange={(e) => setNewCardTitle(e.target.value)}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                                e.preventDefault();
-                                                                handleAddCard(e, col.id);
-                                                            }
-                                                            if (e.key === 'Escape') setIsAddingCard(null);
-                                                        }}
-                                                        className="w-full bg-transparent border-none p-0 text-sm text-white resize-none focus:ring-0 placeholder-slate-600"
-                                                        placeholder="What needs to be done?"
-                                                        rows={2}
-                                                    />
-                                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-dark-800">
-                                                        <button type="button" onClick={() => setIsAddingCard(null)} className="text-[11px] font-bold text-slate-500 hover:text-white uppercase tracking-wider">Cancel</button>
-                                                        <button 
-                                                            type="submit" 
-                                                            className="px-3 py-1 bg-primary-600 text-white text-[11px] font-bold rounded-lg hover:bg-primary-500 transition-colors uppercase tracking-wider"
-                                                        >
-                                                            Create Task
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </form>
-                                        ) : (
+                                        {false ? null : (
                                             <button
-                                                onClick={() => setIsAddingCard(col.id)}
+                                                onClick={() => setSelectedTask({ title: '', status: col.id, priority: 'Medium', tags: [] })}
                                                 className="w-full py-3 flex items-center justify-center gap-2 text-xs font-bold text-slate-500 hover:text-primary-400 hover:bg-primary-500/5 hover:border-primary-500/20 rounded-xl transition-all border border-dashed border-dark-700 mt-2 uppercase tracking-widest"
                                             >
                                                 <Plus size={14} /> Add Task
@@ -192,6 +163,19 @@ export default function ProjectInternalKanban({ projectId }) {
                     members={[]}
                     onClose={() => setSelectedTask(null)}
                     onUpdate={(updates) => setSelectedTask(t => ({ ...t, ...updates }))}
+                    onCreate={async (taskData) => {
+                        try {
+                            await addTask({
+                                ...taskData,
+                                type: 'project',
+                                projectId: projectId,
+                                tags: taskData.tags || ['Sprint']
+                            });
+                            setSelectedTask(null);
+                        } catch (error) {
+                            console.error("Failed to create task:", error);
+                        }
+                    }}
                 />
             )}
         </div>

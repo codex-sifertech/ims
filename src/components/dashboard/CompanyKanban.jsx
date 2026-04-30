@@ -534,7 +534,7 @@ export default function CompanyKanban() {
                                             {provided.placeholder}
 
                                             <button
-                                                onClick={() => setIsAddingCard(col.id)}
+                                                onClick={() => setSelectedTask({ title: '', status: col.id, priority: 'Medium', tags: [] })}
                                                 className="w-full py-5 flex items-center justify-center gap-3 text-[10px] font-black text-slate-500 hover:text-primary-400 hover:bg-primary-500/5 hover:border-primary-500/30 rounded-3xl transition-all border border-dashed border-white/10 mt-4 uppercase tracking-[0.2em] group"
                                             >
                                                 <Plus size={18} className="group-hover:rotate-90 transition-transform" /> 
@@ -549,13 +549,7 @@ export default function CompanyKanban() {
                 </DragDropContext>
             </div>
 
-            <NewTaskModal 
-                isOpen={isAddingCard !== null}
-                colId={isAddingCard}
-                members={members}
-                onClose={() => setIsAddingCard(null)}
-                onAdd={handleAddCard}
-            />
+            
 
             {selectedTask && (
                 <TaskDetailPanel
@@ -563,6 +557,10 @@ export default function CompanyKanban() {
                     members={members}
                     onClose={() => setSelectedTask(null)}
                     onUpdate={(updates) => setSelectedTask(t => ({ ...t, ...updates }))}
+                    onCreate={async (taskData) => {
+                        await handleAddCard(taskData);
+                        setSelectedTask(null);
+                    }}
                 />
             )}
         </>
