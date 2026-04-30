@@ -5,7 +5,7 @@ import {
   Clock, Flag, Tag, AlignLeft, CheckSquare, Link2, List,
   Calendar, Users, User, Trash2, ArrowLeft, Share, MoreHorizontal,
   Copy, Maximize2, Sparkles, Search, Bell, Filter, Mic, Type, FileUp,
-  Activity, ArrowRight
+  Activity, ArrowRight, MessageSquare
 } from 'lucide-react';
 import {
   doc, collection, addDoc, updateDoc, onSnapshot,
