@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import useStore from '../../store/useStore';
 import { CheckCircle2, Calendar, Loader2, ExternalLink } from 'lucide-react';
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '791274596080-bv0l4otccm3hkm0utcu42u9cchavfqpj.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events';
 
 function loadGsiScript() {
