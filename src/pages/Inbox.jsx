@@ -6,7 +6,7 @@ import {
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 import { useProjects } from '../hooks/useProjects';
-import { Send, Hash, Paperclip, Search, Shield, Smile, Plus } from 'lucide-react';
+import { Send, Hash, Paperclip, Search, Shield, Smile, Plus, Users } from 'lucide-react';
 import { format, differenceInMinutes } from 'date-fns';
 
 const EMOJI_SET = ['👍','❤️','😂','🎉','👀','🔥'];
@@ -83,11 +83,12 @@ function MessageBubble({ msg, showHeader, isMe, onReact, taskPath }) {
 }
 
 export default function Inbox() {
-    const { user, activeCompany } = useStore();
+    const { user, activeCompany, globalTasks } = useStore();
     const { projects, loading: projectsLoading } = useProjects();
     const [activeChannel, setActiveChannel] = useState({ id: 'global', name: 'General', type: 'company' });
     const [messages, setMessages] = useState([]);
     const [members, setMembers] = useState([]);
+    const [groups, setGroups] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
     const [typingUsers, setTypingUsers] = useState([]);
@@ -95,12 +96,22 @@ export default function Inbox() {
     const [unreadCounts, setUnreadCounts] = useState({});
     const [mentionSearch, setMentionSearch] = useState('');
     const [showMentions, setShowMentions] = useState(false);
+    const [taskMentionSearch, setTaskMentionSearch] = useState('');
+    const [showTaskMentions, setShowTaskMentions] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [showCreateGroup, setShowCreateGroup] = useState(false);
+    const [groupName, setGroupName] = useState('');
+    const [groupMembers, setGroupMembers] = useState([]);
     const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
     const inputRef = useRef(null);
 
-    const getRoomId = (ch) => ch.type === 'company' ? `company-${activeCompany?.id}` : ch.id;
+    const getRoomId = (ch) => {
+        if (ch.type === 'company') return `company-${activeCompany?.id}`;
+        if (ch.type === 'dm') return ch.id;
+        if (ch.type === 'group') return ch.id;
+        return ch.id;
+    };
     const roomId = getRoomId(activeChannel);
 
     // Members subscription
@@ -110,19 +121,29 @@ export default function Inbox() {
         return onSnapshot(ref, snap => setMembers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     }, [activeCompany?.id]);
 
+    // Groups subscription
+    useEffect(() => {
+        if (!activeCompany?.id) return;
+        const ref = collection(db, 'companies', activeCompany.id, 'groups');
+        return onSnapshot(ref, snap => setGroups(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    }, [activeCompany?.id]);
+
     // Messages subscription
     useEffect(() => {
         if (!user?.uid || !activeCompany?.id) return;
         setLoading(true);
-        const messagesRef = activeChannel.type === 'company'
-            ? collection(db, 'chats', roomId, 'messages')
-            : collection(db, 'companies', activeCompany.id, 'projects', activeChannel.id, 'chat');
-        const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(20));
+        let messagesRef;
+        if (activeChannel.type === 'project') {
+            messagesRef = collection(db, 'companies', activeCompany.id, 'projects', activeChannel.id, 'chat');
+        } else {
+            messagesRef = collection(db, 'chats', roomId, 'messages');
+        }
+        const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(100));
         return onSnapshot(q, snap => {
             setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
         }, () => setLoading(false));
-    }, [roomId, activeChannel.id, activeCompany?.id, user]);
+    }, [roomId, activeChannel.id, activeChannel.type, activeCompany?.id, user]);
 
     // Scroll to bottom
     useEffect(() => {
@@ -141,17 +162,30 @@ export default function Inbox() {
         });
     }, [roomId, activeChannel.type, members, user?.uid]);
 
+    const getMessagesRef = () => {
+        if (activeChannel.type === 'project') {
+            return collection(db, 'companies', activeCompany.id, 'projects', activeChannel.id, 'chat');
+        }
+        return collection(db, 'chats', roomId, 'messages');
+    };
+
+    const getMessageDocRef = (msgId) => {
+        if (activeChannel.type === 'project') {
+            return doc(db, 'companies', activeCompany.id, 'projects', activeChannel.id, 'chat', msgId);
+        }
+        return doc(db, 'chats', roomId, 'messages', msgId);
+    };
+
     const handleSend = async (e) => {
         e?.preventDefault();
         if (!newMessage.trim() || !user?.uid) return;
         const text = newMessage.trim();
         setNewMessage('');
+        setShowTaskMentions(false);
+        setShowMentions(false);
         stopTyping();
         try {
-            const ref = activeChannel.type === 'company'
-                ? collection(db, 'chats', roomId, 'messages')
-                : collection(db, 'companies', activeCompany.id, 'projects', activeChannel.id, 'chat');
-            await addDoc(ref, {
+            await addDoc(getMessagesRef(), {
                 text, senderId: user.uid,
                 senderName: user.name || 'Team Member',
                 createdAt: serverTimestamp(), type: 'text', reactions: {}
@@ -160,9 +194,7 @@ export default function Inbox() {
     };
 
     const handleReact = async (msgId, emoji) => {
-        const ref = activeChannel.type === 'company'
-            ? doc(db, 'chats', roomId, 'messages', msgId)
-            : doc(db, 'companies', activeCompany.id, 'projects', activeChannel.id, 'chat', msgId);
+        const ref = getMessageDocRef(msgId);
         const snap = await getDoc(ref);
         const current = snap.data()?.reactions?.[emoji] || [];
         const updated = current.includes(user.uid)
@@ -172,7 +204,7 @@ export default function Inbox() {
     };
 
     const startTyping = async () => {
-        if (activeChannel.type !== 'company') return;
+        if (activeChannel.type === 'project') return;
         const channelRef = doc(db, 'chats', roomId);
         try { await setDoc(channelRef, { typingUsers: arrayUnion(user.uid) }, { merge: true }); } catch {}
         clearTimeout(typingTimeoutRef.current);
@@ -180,7 +212,7 @@ export default function Inbox() {
     };
 
     const stopTyping = async () => {
-        if (activeChannel.type !== 'company') return;
+        if (activeChannel.type === 'project') return;
         const channelRef = doc(db, 'chats', roomId);
         try { await setDoc(channelRef, { typingUsers: arrayRemove(user.uid) }, { merge: true }); } catch {}
     };
@@ -189,11 +221,18 @@ export default function Inbox() {
         const val = e.target.value;
         setNewMessage(val);
         startTyping();
+        // @member mentions
         const lastAt = val.lastIndexOf('@');
         if (lastAt !== -1 && !val.slice(lastAt + 1).includes(' ')) {
             setMentionSearch(val.slice(lastAt + 1));
             setShowMentions(true);
         } else { setShowMentions(false); }
+        // #task mentions
+        const lastHash = val.lastIndexOf('#');
+        if (lastHash !== -1 && !val.slice(lastHash + 1).includes(' ')) {
+            setTaskMentionSearch(val.slice(lastHash + 1));
+            setShowTaskMentions(true);
+        } else { setShowTaskMentions(false); }
     };
 
     const insertMention = (member) => {
@@ -202,6 +241,40 @@ export default function Inbox() {
         setShowMentions(false);
         inputRef.current?.focus();
     };
+
+    const insertTaskMention = (task) => {
+        const lastHash = newMessage.lastIndexOf('#');
+        setNewMessage(newMessage.slice(0, lastHash) + `#${task.title} `);
+        setShowTaskMentions(false);
+        inputRef.current?.focus();
+    };
+
+    const openDM = (member) => {
+        const sortedIds = [user.uid, member.id].sort().join('-');
+        const dmId = `dm-${sortedIds}`;
+        setActiveChannel({ id: dmId, name: member.name, type: 'dm', memberId: member.id });
+    };
+
+    const handleCreateGroup = async () => {
+        if (!groupName.trim() || !activeCompany?.id) return;
+        try {
+            const groupRef = await addDoc(collection(db, 'companies', activeCompany.id, 'groups'), {
+                name: groupName.trim(),
+                members: [user.uid, ...groupMembers.map(m => m.id)],
+                memberNames: [user.name, ...groupMembers.map(m => m.name)],
+                createdBy: user.uid,
+                createdAt: serverTimestamp(),
+            });
+            setGroupName('');
+            setGroupMembers([]);
+            setShowCreateGroup(false);
+            setActiveChannel({ id: `group-${groupRef.id}`, name: groupName.trim(), type: 'group' });
+        } catch (err) { console.error('Group creation failed:', err); }
+    };
+
+    const matchingTasks = globalTasks.filter(t =>
+        t.title?.toLowerCase().includes(taskMentionSearch.toLowerCase())
+    ).slice(0, 6);
 
     const onlineMembers = members.filter(m => m.isOnline);
     const offlineMembers = members.filter(m => !m.isOnline);
@@ -239,8 +312,13 @@ export default function Inbox() {
 
                     {/* General */}
                     <div className="px-2 mb-1">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-2 mb-1">Channels</p>
-                        <button onClick={() => setActiveChannel({ id: 'global', name: 'General', type: 'company' })}
+                        <div className="flex items-center justify-between px-2 mb-1">
+                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Channels</p>
+                            <button onClick={() => setShowCreateGroup(true)} className="text-slate-600 hover:text-primary-400 transition-colors" title="Create Group">
+                                <Plus size={12} />
+                            </button>
+                        </div>
+                         <button onClick={() => setActiveChannel({ id: 'global', name: 'General', type: 'company' })}
                             className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
                                 activeChannel.id === 'global' ? 'bg-primary-600/20 text-primary-300' : 'text-slate-400 hover:bg-dark-800 hover:text-white'
                             }`}>
@@ -264,18 +342,73 @@ export default function Inbox() {
                         ))}
                     </div>
 
-                    {/* DMs placeholder */}
+                    {/* Group channels */}
+                    {groups.length > 0 && (
+                        <div className="px-2 mt-3">
+                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-2 mb-1">Groups</p>
+                            {groups.map(g => (
+                                <button key={g.id}
+                                    onClick={() => setActiveChannel({ id: `group-${g.id}`, name: g.name, type: 'group' })}
+                                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                                        activeChannel.id === `group-${g.id}` ? 'bg-primary-600/20 text-primary-300' : 'text-slate-400 hover:bg-dark-800 hover:text-white'
+                                    }`}>
+                                    <Users size={13} className="shrink-0 text-slate-500" />
+                                    <span className="truncate flex-1 text-left">{g.name}</span>
+                                    <span className="text-[8px] text-slate-600">{g.members?.length}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Create Group Inline */}
+                    {showCreateGroup && (
+                        <div className="px-2 mt-2">
+                            <div className="bg-dark-800 rounded-lg p-2.5 border border-dark-700 space-y-2">
+                                <input value={groupName} onChange={e => setGroupName(e.target.value)}
+                                    placeholder="Group name..." autoFocus
+                                    className="w-full bg-dark-900 rounded-md px-2 py-1.5 text-[11px] text-white outline-none border border-dark-600 focus:border-primary-500 placeholder:text-slate-600" />
+                                <div className="max-h-20 overflow-y-auto space-y-0.5">
+                                    {members.filter(m => m.id !== user?.uid).map(m => {
+                                        const sel = groupMembers.find(g => g.id === m.id);
+                                        return (
+                                            <button key={m.id} type="button"
+                                                onClick={() => setGroupMembers(prev => sel ? prev.filter(x => x.id !== m.id) : [...prev, m])}
+                                                className={`w-full flex items-center gap-2 px-2 py-1 rounded text-[10px] transition-colors ${
+                                                    sel ? 'bg-primary-500/10 text-primary-300' : 'text-slate-400 hover:bg-dark-700'
+                                                }`}>
+                                                <Avatar name={m.name} size={4} />
+                                                <span className="truncate">{m.name}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div className="flex gap-1.5">
+                                    <button onClick={() => setShowCreateGroup(false)} className="flex-1 py-1 text-[10px] text-slate-500 hover:text-white bg-dark-900 rounded-md">Cancel</button>
+                                    <button onClick={handleCreateGroup} disabled={!groupName.trim()}
+                                        className="flex-1 py-1 text-[10px] text-white bg-primary-600 hover:bg-primary-500 rounded-md disabled:opacity-40">Create</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* DMs — clickable */}
                     <div className="px-2 mt-4">
                         <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-2 mb-1">Direct Messages</p>
-                        {members.filter(m => m.id !== user?.uid).slice(0, 5).map(m => (
-                            <div key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-slate-500 text-sm cursor-default">
-                                <div className="relative">
-                                    <Avatar name={m.name} size={6} />
-                                    <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-dark-900 ${m.isOnline ? 'bg-emerald-500' : 'bg-slate-600'}`} />
-                                </div>
-                                <span className="truncate text-xs">{m.name}</span>
-                            </div>
-                        ))}
+                        {members.filter(m => m.id !== user?.uid).map(m => {
+                            const dmId = `dm-${[user.uid, m.id].sort().join('-')}`;
+                            return (
+                                <button key={m.id} onClick={() => openDM(m)}
+                                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                                        activeChannel.id === dmId ? 'bg-primary-600/20 text-primary-300' : 'text-slate-400 hover:bg-dark-800 hover:text-white'
+                                    }`}>
+                                    <div className="relative">
+                                        <Avatar name={m.name} size={6} />
+                                        <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-dark-900 ${m.isOnline ? 'bg-emerald-500' : 'bg-slate-600'}`} />
+                                    </div>
+                                    <span className="truncate text-xs">{m.name}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -336,10 +469,26 @@ export default function Inbox() {
                         {/* @mention dropdown */}
                         {showMentions && members.filter(m => m.name?.toLowerCase().includes(mentionSearch.toLowerCase())).length > 0 && (
                             <div className="absolute bottom-full left-0 w-52 mb-2 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden z-50">
+                                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-3 pt-2 pb-1">Members</p>
                                 {members.filter(m => m.name?.toLowerCase().includes(mentionSearch.toLowerCase())).map(m => (
                                     <button key={m.id} onClick={() => insertMention(m)}
                                         className="w-full flex items-center gap-2 px-3 py-2 hover:bg-dark-700 text-xs text-white transition-colors text-left">
                                         <Avatar name={m.name} size={6} /> {m.name}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* #task mention dropdown */}
+                        {showTaskMentions && matchingTasks.length > 0 && (
+                            <div className="absolute bottom-full left-0 w-64 mb-2 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden z-50">
+                                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-3 pt-2 pb-1">Tasks</p>
+                                {matchingTasks.map(t => (
+                                    <button key={t.id} onClick={() => insertTaskMention(t)}
+                                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-dark-700 text-xs text-white transition-colors text-left">
+                                        <Hash size={12} className="text-primary-400 shrink-0" />
+                                        <span className="truncate">{t.title}</span>
+                                        {t.status && <span className="text-[8px] text-slate-600 shrink-0 uppercase">{t.status}</span>}
                                     </button>
                                 ))}
                             </div>

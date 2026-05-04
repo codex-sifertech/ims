@@ -188,8 +188,9 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, mem
   const handleCommentInput = (e) => {
     const val = e.target.value;
     setCommentText(val);
+    // @member mentions
     const lastAt = val.lastIndexOf('@');
-    if (lastAt !== -1 && lastAt === val.length - 1 || (lastAt !== -1 && !val.slice(lastAt + 1).includes(' '))) {
+    if (lastAt !== -1 && !val.slice(lastAt + 1).includes(' ')) {
       setMentionSearch(val.slice(lastAt + 1));
       setShowMentions(true);
     } else {
