@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LogOut, Home, FolderKanban, Briefcase, MessageSquare, Sparkles, Video, Settings, ChevronDown, Shield, Sun, Moon, ChevronLeft, ChevronRight, Users2 } from 'lucide-react';
+import { LogOut, Home, FolderKanban, Briefcase, MessageSquare, Sparkles, Video, Settings, ChevronDown, Shield, Sun, Moon, ChevronLeft, ChevronRight, Users2, CalendarDays } from 'lucide-react';
 import { auth } from '../../firebase';
 import useStore from '../../store/useStore';
 import CompanySwitcher from './CompanySwitcher';
@@ -35,6 +35,7 @@ export default function DashboardLayout() {
             ]
         },
         { name: 'My Board', path: '/dashboard/my-board', icon: <FolderKanban size={20} /> },
+        { name: 'Calendar', path: '/dashboard/my-board?tab=calendar', icon: <CalendarDays size={20} /> },
         { name: 'Projects', path: '/dashboard/projects', icon: <Briefcase size={20} /> },
         { name: 'Chat', path: '/dashboard/chat', icon: <MessageSquare size={20} /> },
         { name: 'AI Ecosystem', path: '/dashboard/ai', icon: <Sparkles size={20} /> },

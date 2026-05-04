@@ -24,6 +24,8 @@ const PROJECT_COLORS = [
     'bg-[#FF5500]/10 text-[#FF5500] border-[#FF5500]/20',
 ];
 
+const PROJECT_STRIP_COLORS = ['#FF007F','#00FF00','#00E5FF','#FFEA00','#B500FF','#FF5500','#FF6B6B','#4ECDC4'];
+
 export default function GlobalTaskBoard() {
     const { globalTasks, tasksLoading, activeCompany } = useStore();
     const { addTaskToCompany, deleteTask } = useGlobalTasks();
@@ -60,6 +62,15 @@ export default function GlobalTaskBoard() {
         if (!task.projectTitle) return null;
         const colorClass = getProjectColorClass(task.projectTitle);
         return { label: task.projectTitle, colorClass };
+    };
+
+    const getProjectStripColor = (task) => {
+        if (task.type === 'company') return '#6366f1';
+        if (!task.projectTitle) return '#475569';
+        const str = String(task.projectTitle).trim().toLowerCase();
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        return PROJECT_STRIP_COLORS[Math.abs(hash) % PROJECT_STRIP_COLORS.length];
     };
 
     const onDragEnd = async (result) => {
@@ -177,12 +188,15 @@ export default function GlobalTaskBoard() {
                                                             {...provided.draggableProps}
                                                             {...provided.dragHandleProps}
                                                             onClick={() => setSelectedTask(card)}
-                                                            className={`bg-dark-900/80 backdrop-blur-md p-4 rounded-xl border border-white/5 group transition-all cursor-pointer shadow-sm hover:bg-white/[0.02] ${
+                                                            className={`bg-dark-900/80 backdrop-blur-md rounded-xl border border-white/5 group transition-all cursor-pointer shadow-sm hover:bg-white/[0.02] flex overflow-hidden ${
                                                                 snapshot.isDragging
                                                                     ? 'border-primary-500 shadow-2xl shadow-primary-500/20 rotate-1 scale-[1.02]'
                                                                     : 'border-dark-700 hover:border-dark-600 hover:shadow-lg'
                                                             }`}
                                                         >
+                                                            {/* Project color strip */}
+                                                            <div className="w-1 shrink-0 rounded-l-xl" style={{ backgroundColor: getProjectStripColor(card) }} />
+                                                            <div className="p-4 flex-1 min-w-0">
                                                             <div className="flex justify-between items-start gap-2 mb-2">
                                                                 <h4 className="text-sm font-semibold text-white leading-snug">{card.title}</h4>
                                                                 <button
@@ -246,7 +260,8 @@ export default function GlobalTaskBoard() {
                                                                         </div>
                                                                     )}
                                                                 </div>
-                                                            </div>
+                                                                </div>
+                                                        </div>
                                                         </div>
                                                     )}
                                                 </Draggable>

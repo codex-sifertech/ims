@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { LayoutDashboard, StickyNote, Target, CalendarDays, Route, Settings, Save, Check, ExternalLink } from 'lucide-react';
 import GlobalTaskBoard from '../components/dashboard/GlobalTaskBoard';
 import VisionBoard from '../components/dashboard/VisionBoard';
@@ -126,7 +127,13 @@ function CalendarView() {
 }
 
 export default function MyBoard() {
-    const [activeTab, setActiveTab] = useState('kanban');
+    const [searchParams] = useSearchParams();
+    const tabFromUrl = searchParams.get('tab');
+    const [activeTab, setActiveTab] = useState(tabFromUrl || 'kanban');
+
+    useEffect(() => {
+        if (tabFromUrl) setActiveTab(tabFromUrl);
+    }, [tabFromUrl]);
 
     const tabs = [
         { id: 'kanban',   label: 'Global Task Board', icon: <LayoutDashboard size={16} /> },
