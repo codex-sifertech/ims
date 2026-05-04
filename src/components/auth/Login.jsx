@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ShieldAlert, ArrowRight, Building2, Eye, EyeOff } from 'lucide-react';
+import { ShieldAlert, ArrowRight, Building2, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -25,6 +25,7 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
+    const [resetMessage, setResetMessage] = useState('');
     const [loading, setLoading] = useState(false);
     const [showIntro, setShowIntro] = useState(true);
     const navigate = useNavigate();
@@ -51,6 +52,24 @@ export default function Login() {
             setError(msg);
             setLoading(false);
         }
+    };
+
+    const handleResetPassword = async () => {
+        if (!email) {
+            setError('Please enter your email address first.');
+            setResetMessage('');
+            return;
+        }
+        setError('');
+        setResetMessage('');
+        setLoading(true);
+        try {
+            await sendPasswordResetEmail(auth, email);
+            setResetMessage('Password reset email sent! Check your inbox.');
+        } catch (err) {
+            setError(err.message || 'Failed to send reset email.');
+        }
+        setLoading(false);
     };
 
     return (
@@ -143,7 +162,16 @@ export default function Login() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Password</label>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest">Password</label>
+                                            <button 
+                                                type="button" 
+                                                onClick={handleResetPassword}
+                                                className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                                            >
+                                                Forgot Password?
+                                            </button>
+                                        </div>
                                         <div className="relative">
                                             <input
                                                 type={showPassword ? 'text' : 'password'}
@@ -175,6 +203,17 @@ export default function Login() {
                                             >
                                                 <ShieldAlert size={16} className="shrink-0" />
                                                 <p>{error}</p>
+                                            </motion.div>
+                                        )}
+                                        {resetMessage && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-3 rounded-xl flex items-center gap-3 text-sm"
+                                            >
+                                                <CheckCircle2 size={16} className="shrink-0" />
+                                                <p>{resetMessage}</p>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
