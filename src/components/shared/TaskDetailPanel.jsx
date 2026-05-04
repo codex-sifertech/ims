@@ -15,6 +15,7 @@ import { db } from '../../firebase';
 import useStore from '../../store/useStore';
 import { format, isPast } from 'date-fns';
 import { sendNotification } from '../../utils/notifications';
+import { syncTaskToGoogleCalendar } from '../../utils/calendarSync';
 
 const PRIORITIES = [
   { label: 'Low',    color: 'bg-emerald-500/20', dot: 'bg-emerald-400', text: 'text-emerald-300', border: 'border-emerald-500/30', hover: 'hover:border-emerald-500/50' },
@@ -101,7 +102,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, mem
       return;
     }
     if (onCreate) {
-      onCreate({
+      const newTaskData = {
         title: title.trim(),
         status,
         priority,
@@ -109,7 +110,14 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, mem
         assignedTo: assignees,
         startDate,
         dueDate,
-      });
+      };
+      onCreate(newTaskData);
+      
+      // Sync to Google Calendar if due date exists
+      if (dueDate) {
+          syncTaskToGoogleCalendar(user.uid, newTaskData);
+      }
+      
       onClose();
     }
   };
@@ -173,6 +181,12 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, mem
          assignees.forEach(m => {
              sendNotification(m.id, user, 'completed', `completed task "${task.title}"`, task.id);
          });
+      }
+
+      // Sync to Google Calendar
+      const updatedTask = { ...task, [field]: value };
+      if (!isNewTask && updatedTask.dueDate && ['title', 'description', 'dueDate', 'assignedTo'].includes(field)) {
+          syncTaskToGoogleCalendar(user.uid, updatedTask);
       }
 
       onUpdate?.({ [field]: value });
