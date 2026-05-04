@@ -65,13 +65,10 @@ function CalendarView() {
                 </div>
                 <h3 className="text-lg font-black text-white">Connect Google Calendar</h3>
                 <p className="text-slate-500 text-sm max-w-md text-center">
-                    {isAdmin
-                        ? 'Enter your Google Calendar ID below to embed the calendar for your entire team. Find it in Google Calendar → Settings → Calendar ID.'
-                        : 'Ask your admin to configure the Google Calendar integration.'}
+                    Enter your Google Calendar ID below to embed the calendar for your entire team. Find it in Google Calendar → Settings → Calendar ID.
                 </p>
-                {isAdmin && (
-                    <div className="flex flex-col gap-3 w-full max-w-md mt-2">
-                        <input
+                <div className="flex flex-col gap-3 w-full max-w-md mt-2">
+                    <input
                             value={calendarId}
                             onChange={e => setCalendarId(e.target.value)}
                             placeholder="e.g. your-email@gmail.com or calendar-id@group.calendar.google.com"
@@ -91,7 +88,6 @@ function CalendarView() {
                             Make sure your calendar is set to <strong className="text-slate-400">public</strong> in Google Calendar sharing settings for the embed to work.
                         </p>
                     </div>
-                )}
             </div>
         );
     }
@@ -101,20 +97,18 @@ function CalendarView() {
     return (
         <div className="flex-1 flex flex-col h-full">
             {/* Admin config bar */}
-            {isAdmin && (
-                <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-dark-800/50 border-b border-dark-700">
-                    <Settings size={12} className="text-slate-500" />
-                    <input value={calendarId} onChange={e => setCalendarId(e.target.value)}
-                        className="flex-1 bg-transparent text-[11px] text-slate-400 outline-none placeholder:text-slate-600"
-                        placeholder="Calendar ID..." />
-                    {calendarId !== savedId && (
-                        <button onClick={handleSave} className="text-[10px] font-bold text-primary-400 hover:text-primary-300 flex items-center gap-1">
-                            {saving ? '...' : <><Save size={10} /> Update</>}
-                        </button>
-                    )}
-                    {justSaved && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><Check size={10} /> Saved</span>}
-                </div>
-            )}
+            <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-dark-800/50 border-b border-dark-700">
+                <Settings size={12} className="text-slate-500" />
+                <input value={calendarId} onChange={e => setCalendarId(e.target.value)}
+                    className="flex-1 bg-transparent text-[11px] text-slate-400 outline-none placeholder:text-slate-600"
+                    placeholder="Calendar ID..." />
+                {calendarId !== savedId && (
+                    <button onClick={handleSave} className="text-[10px] font-bold text-primary-400 hover:text-primary-300 flex items-center gap-1">
+                        {saving ? '...' : <><Save size={10} /> Update</>}
+                    </button>
+                )}
+                {justSaved && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><Check size={10} /> Saved</span>}
+            </div>
             <iframe
                 src={embedUrl}
                 className="flex-1 w-full border-0 rounded-b-xl"
