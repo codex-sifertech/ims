@@ -17,7 +17,7 @@ export default function DashboardLayout() {
 
     // Initialize Global Persistence Hooks
     useGlobalTasks();
-    useTimeTracker();
+    const { isCheckedIn, sessionStart, toggleCheckIn: handleCheckInToggle } = useTimeTracker();
     useOnlinePresence();
 
 
@@ -142,7 +142,13 @@ export default function DashboardLayout() {
                 </div>
 
                 <div className="shrink-0 mt-auto pt-4 border-t border-dark-700 bg-dark-800 overflow-x-hidden">
-                    {!isSidebarCollapsed && <GlobalTimeTracker />}
+                    {!isSidebarCollapsed && (
+                        <GlobalTimeTracker
+                            isCheckedIn={isCheckedIn}
+                            sessionStart={sessionStart}
+                            onToggle={handleCheckInToggle}
+                        />
+                    )}
                     <div className="flex flex-col gap-2 p-3">
                         {!isSidebarCollapsed && (
                             <div className="flex items-center justify-between px-4 py-2">

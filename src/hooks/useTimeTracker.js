@@ -1,11 +1,13 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { doc, onSnapshot, setDoc, addDoc, updateDoc, collection, query, where, getDocs, serverTimestamp, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 
 export function useTimeTracker() {
     const { user, activeCompany, isCheckedIn, toggleCheckIn } = useStore();
-    const sessionStartRef = useRef(null); // Store local session start time
+    const sessionStartRef = useRef(null);
+    // Exposed so UI can compute elapsed seconds accurately after a page refresh
+    const [sessionStart, setSessionStart] = useState(null);
 
     // Sync check-in status FROM Firestore → store on mount
     useEffect(() => {
@@ -14,10 +16,14 @@ export function useTimeTracker() {
         const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const remoteStatus = docSnap.data().isCheckedIn ?? false;
+                const remoteStart = docSnap.data().sessionStart ?? null;
                 toggleCheckIn(remoteStatus);
-                // Restore sessionStart from Firestore if checked in
-                if (remoteStatus && docSnap.data().sessionStart) {
-                    sessionStartRef.current = docSnap.data().sessionStart;
+                if (remoteStatus && remoteStart) {
+                    sessionStartRef.current = remoteStart;
+                    setSessionStart(remoteStart);
+                } else {
+                    sessionStartRef.current = null;
+                    setSessionStart(null);
                 }
             }
         }, (err) => {
@@ -46,6 +52,7 @@ export function useTimeTracker() {
                 const now = new Date();
                 const isoNow = now.toISOString();
                 sessionStartRef.current = isoNow;
+                setSessionStart(isoNow);
 
                 // Persist session start
                 await setDoc(settingsRef, {
@@ -108,6 +115,7 @@ export function useTimeTracker() {
                 }
 
                 sessionStartRef.current = null;
+                setSessionStart(null);
 
                 // Persist checkout
                 await setDoc(settingsRef, {
@@ -137,5 +145,5 @@ export function useTimeTracker() {
         }
     }, [user, activeCompany, isCheckedIn, toggleCheckIn]);
 
-    return { isCheckedIn, toggleCheckIn: handleCheckInToggle };
+    return { isCheckedIn, sessionStart, toggleCheckIn: handleCheckInToggle };
 }
