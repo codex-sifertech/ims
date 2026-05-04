@@ -8,11 +8,11 @@ import {
 } from 'lucide-react';
 import {
     collection, onSnapshot, query, where, orderBy,
-    getDocs, setDoc, doc, deleteDoc, addDoc, limit, serverTimestamp
+    getDocs, getDoc, setDoc, doc, deleteDoc, addDoc, limit, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
-import { format, isToday, startOfMonth, endOfMonth, isSameDay, startOfWeek } from 'date-fns';
+import { format, startOfMonth, startOfWeek } from 'date-fns';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -154,9 +154,9 @@ function InviteMemberModal({ activeCompany, user, onClose }) {
 
             // Add email to company accessList so they can log in and see this workspace
             const companyRef = doc(db, 'companies', activeCompany.id);
-            const companySnap = await getDocs(query(collection(db, 'companies'), where('__name__', '==', activeCompany.id)));
-            if (!companySnap.empty) {
-                const currentList = companySnap.docs[0].data().accessList || [];
+            const companySnap = await getDoc(companyRef);
+            if (companySnap.exists()) {
+                const currentList = companySnap.data().accessList || [];
                 if (!currentList.includes(trimmedEmail)) {
                     await setDoc(companyRef, { accessList: [...currentList, trimmedEmail] }, { merge: true });
                 }
@@ -281,9 +281,9 @@ function MemberActionsMenu({ member, activeCompany, currentUser, isAdmin, onClos
             await deleteDoc(doc(db, 'companies', activeCompany.id, 'members', member.id));
             // Remove from accessList
             const companyRef = doc(db, 'companies', activeCompany.id);
-            const snap = await getDocs(query(collection(db, 'companies'), where('__name__', '==', activeCompany.id)));
-            if (!snap.empty) {
-                const current = snap.docs[0].data().accessList || [];
+            const companySnap = await getDoc(companyRef);
+            if (companySnap.exists()) {
+                const current = companySnap.data().accessList || [];
                 await setDoc(companyRef, { accessList: current.filter(e => e !== member.email) }, { merge: true });
             }
             onClose();
