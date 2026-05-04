@@ -6,6 +6,7 @@ import useStore from '../../store/useStore';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import TaskDetailPanel from '../shared/TaskDetailPanel';
+import { sendNotification } from '../../utils/notifications';
 
 const COLUMNS = [
     { id: 'todo',        title: 'To Do',       dot: 'bg-slate-500' },
@@ -82,6 +83,14 @@ export default function GlobalTaskBoard() {
         try {
             const taskRef = doc(db, task._path);
             await updateDoc(taskRef, { status: destination.droppableId, updatedAt: new Date().toISOString() });
+
+            if (destination.droppableId === 'done') {
+                const currentUser = useStore.getState().user;
+                const assignees = Array.isArray(task.assignedTo) ? task.assignedTo : [];
+                assignees.forEach(m => {
+                    sendNotification(m.id || m, currentUser, 'completed', `completed task "${task.title}"`, task.id);
+                });
+            }
         } catch (err) {
             console.error('Failed to move task:', err);
         }

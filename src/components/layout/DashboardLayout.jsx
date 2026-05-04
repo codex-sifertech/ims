@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { useGlobalTasks } from '../../hooks/useGlobalTasks';
 import { useTimeTracker } from '../../hooks/useTimeTracker';
 import { useOnlinePresence } from '../../hooks/useOnlinePresence';
+import NotificationDropdown from './NotificationDropdown';
 
 export default function DashboardLayout() {
     const { user, activeCompany, theme, setTheme, isSidebarCollapsed, setSidebarCollapsed } = useStore();
@@ -151,17 +152,22 @@ export default function DashboardLayout() {
                         />
                     )}
                     <div className="flex flex-col gap-2 p-3">
-                        {!isSidebarCollapsed && (
+                        {!isSidebarCollapsed ? (
                             <div className="flex items-center justify-between px-4 py-2">
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
                                         {user?.name?.charAt(0) || user?.email?.charAt(0) || '?'}
                                     </div>
-                                    <div className="text-xs truncate">
-                                        <p className="text-white font-medium truncate w-32">{user?.name || user?.email}</p>
+                                    <div className="text-xs truncate max-w-[100px]">
+                                        <p className="text-white font-medium truncate w-full">{user?.name || user?.email}</p>
                                         <p className="text-slate-500">Online</p>
                                     </div>
                                 </div>
+                                <NotificationDropdown />
+                            </div>
+                        ) : (
+                            <div className="flex justify-center py-2">
+                                <NotificationDropdown />
                             </div>
                         )}
 

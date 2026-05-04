@@ -4,6 +4,7 @@ import { LayoutDashboard, StickyNote, Target, CalendarDays, Route, Settings, Sav
 import GlobalTaskBoard from '../components/dashboard/GlobalTaskBoard';
 import VisionBoard from '../components/dashboard/VisionBoard';
 import NotesSection from '../components/work/NotesSection';
+import RoadmapView from '../components/dashboard/RoadmapView';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
@@ -191,9 +192,7 @@ export default function MyBoard() {
                     <CalendarView />
                 )}
                 {activeTab === 'roadmap' && (
-                    <div className="flex-1 m-6 flex items-center justify-center text-slate-500 border border-dark-700 rounded-xl bg-dark-800 border-dashed">
-                        Roadmap View — Integration Placeholder
-                    </div>
+                    <RoadmapView />
                 )}
             </div>
         </div>

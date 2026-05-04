@@ -14,6 +14,7 @@ import {
 import { db } from '../../firebase';
 import useStore from '../../store/useStore';
 import { format, isPast } from 'date-fns';
+import { sendNotification } from '../../utils/notifications';
 
 const PRIORITIES = [
   { label: 'Low',    color: 'bg-emerald-500/20', dot: 'bg-emerald-400', text: 'text-emerald-300', border: 'border-emerald-500/30', hover: 'hover:border-emerald-500/50' },
@@ -165,6 +166,15 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, mem
     if (!taskPath) return;
     try {
       await updateDoc(doc(db, taskPath), { [field]: value, updatedAt: new Date().toISOString() });
+      
+      // Notify on completion
+      if (field === 'status' && value === 'done') {
+         const assignees = Array.isArray(task.assignedTo) ? task.assignedTo : [];
+         assignees.forEach(m => {
+             sendNotification(m.id, user, 'completed', `completed task "${task.title}"`, task.id);
+         });
+      }
+
       onUpdate?.({ [field]: value });
     } catch (e) { console.error('Save failed:', e); }
   };
@@ -181,6 +191,18 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, mem
         reactions: {},
         type: 'text'
       });
+
+      // Extract mentions and notify
+      const words = commentText.trim().split(/\s+/);
+      const mentions = words.filter(w => w.startsWith('@')).map(w => w.substring(1));
+      
+      mentions.forEach(mentionName => {
+         const member = members.find(m => m.name?.toLowerCase() === mentionName.toLowerCase());
+         if (member) {
+             sendNotification(member.id, user, 'mention', `mentioned you in "${task.title || 'a task'}"`, task.id);
+         }
+      });
+
       setCommentText('');
     } finally { setSending(false); }
   };
@@ -210,8 +232,13 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, mem
     const updated = existing
       ? assignees.filter(a => a.id !== member.id)
       : [...assignees, { id: member.id, name: member.name, photoURL: member.photoURL }];
+    
     setAssignees(updated);
     saveField('assignedTo', updated);
+
+    if (!existing) {
+        sendNotification(member.id, user, 'assignment', `assigned you to "${task.title || 'a new task'}"`, task.id);
+    }
   };
 
   const isOverdue = dueDate && isPast(new Date(dueDate)) && status !== 'done';
