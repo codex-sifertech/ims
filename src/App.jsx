@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { collection, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
 import useStore from './store/useStore';
+import { USER_ROLES, accessList } from './config/accessControl';
 
 // Components
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -21,6 +22,7 @@ import AdminPanel from './pages/AdminPanel';
 import PeopleHR from './pages/PeopleHR';
 import MemberDetails from './pages/MemberDetails';
 import GlobalFloatingStream from './components/shared/GlobalFloatingStream';
+import LoadingScreen from './components/shared/LoadingScreen';
 
 import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
@@ -28,12 +30,7 @@ import Signup from './components/auth/Signup';
 function ProtectedRoute({ children }) {
   const { user, isLoading } = useStore();
 
-  if (isLoading) {
-    return <div className="h-screen w-screen flex flex-col items-center justify-center bg-dark-900 text-white">
-      <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      Loading IMS...
-    </div>;
-  }
+  if (isLoading) return <LoadingScreen />;
 
   // Without auth, redirect to login
   if (!user) {
@@ -52,7 +49,7 @@ function MainRoute() {
 }
 
 function App() {
-  const { setLoading, setCompanies, setUser, setActiveCompany, activeCompany, user, theme, setTheme } = useStore();
+  const { setLoading, setCompanies, setUser, setActiveCompany, activeCompany, user, theme } = useStore();
   
   useEffect(() => {
     // Initialize Theme on Mount
@@ -67,14 +64,15 @@ function App() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-            const isMaster = firebaseUser.email === 'sifertech.co@gmail.com';
+            const email = firebaseUser.email?.toLowerCase().trim();
+            const staticAccess = accessList[email];
             const userData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               displayName: firebaseUser.displayName,
               photoURL: firebaseUser.photoURL,
-              role: isMaster ? 'master_admin' : 'member',
-              name: firebaseUser.displayName || firebaseUser.email.split('@')[0] || 'User'
+              role: staticAccess?.role ?? USER_ROLES.MEMBER,
+              name: firebaseUser.displayName || email?.split('@')[0] || 'User'
             };
             
             setUser(userData);
@@ -95,7 +93,7 @@ function App() {
             }));
 
             // Auto-create a Main Workspace if none exist (specifically for the admin)
-            if (fetchedCompanies.length === 0 && firebaseUser.email === 'sifertech.co@gmail.com') {
+            if (fetchedCompanies.length === 0 && userData.role === USER_ROLES.MASTER_ADMIN) {
             const newCompanyRef = doc(companiesRef); // Auto ID
             const newCompanyId = newCompanyRef.id;
             const newCompanyData = {
@@ -162,11 +160,12 @@ function App() {
   useEffect(() => {
     if (!user?.uid || !activeCompany?.id) return;
 
-    const syncStatus = async () => {
+    const memberRef = doc(db, 'companies', activeCompany.id, 'members', user.uid);
+
+    const syncStatus = async (status = 'online') => {
       try {
-        const memberRef = doc(db, 'companies', activeCompany.id, 'members', user.uid);
         await setDoc(memberRef, {
-          status: 'online',
+          status,
           lastActive: new Date().toISOString(),
           name: user.name || user.email,
           photoURL: user.photoURL || null
@@ -176,10 +175,13 @@ function App() {
       }
     };
 
-    syncStatus();
-    // Keep alive every 5 minutes
-    const interval = setInterval(syncStatus, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    syncStatus('online');
+    const interval = setInterval(() => syncStatus('online'), 5 * 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      syncStatus('offline');
+    };
   }, [user?.uid, activeCompany?.id]);
 
   return (

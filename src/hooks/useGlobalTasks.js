@@ -119,20 +119,7 @@ export function useGlobalTasks() {
             unsubscribes.forEach(unsub => unsub());
             projectTaskUnsubs.forEach(unsub => unsub());
         };
-    }, [activeCompany?.id, setGlobalTasks]);
-
-    const addTask = async (taskData) => {
-        if (!activeCompany?.id || !user?.uid) return;
-        try {
-            const tasksRef = collection(db, 'globalTasks', user.uid, 'tasks');
-            await addDoc(tasksRef, {
-                ...taskData,
-                createdAt: new Date().toISOString()
-            });
-        } catch (error) {
-            console.error("Error adding task:", error);
-        }
-    };
+    }, [activeCompany?.id, user?.uid, setGlobalTasks]);
 
     const updateTask = async (taskId, updates) => {
         if (!activeCompany?.id || !user?.uid) return;

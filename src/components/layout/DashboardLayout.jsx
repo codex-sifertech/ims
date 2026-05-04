@@ -11,7 +11,7 @@ import { useTimeTracker } from '../../hooks/useTimeTracker';
 import { useOnlinePresence } from '../../hooks/useOnlinePresence';
 
 export default function DashboardLayout() {
-    const { user, theme, setTheme, isSidebarCollapsed, setSidebarCollapsed } = useStore();
+    const { user, activeCompany, theme, setTheme, isSidebarCollapsed, setSidebarCollapsed } = useStore();
     const location = useLocation();
     const [dashboardExpanded, setDashboardExpanded] = useState(true);
 
@@ -40,7 +40,7 @@ export default function DashboardLayout() {
         { name: 'AI Ecosystem', path: '/dashboard/ai', icon: <Sparkles size={20} /> },
         { name: 'Meetings', path: '/dashboard/meetings', icon: <Video size={20} /> },
         { name: 'People HR', path: '/dashboard/people', icon: <Users2 size={20} /> },
-        ...(user?.uid === useStore.getState().activeCompany?.owner ? [
+        ...(user?.uid === activeCompany?.owner ? [
             { name: 'Admin Panel', path: '/dashboard/settings', icon: <Shield size={20} />, danger: true }
         ] : [
             { name: 'Workspace Details', path: '/dashboard/settings', icon: <Settings size={20} /> }
