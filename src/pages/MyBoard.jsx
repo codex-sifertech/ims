@@ -92,7 +92,18 @@ function CalendarView() {
         );
     }
 
-    const embedUrl = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(savedId)}&ctz=${encodeURIComponent(tz)}&bgcolor=%230f172a&showTitle=0&showPrint=0&showCalendars=0&showTz=1&mode=WEEK`;
+    let cleanId = savedId.trim();
+    // If user accidentally pasted the full iframe HTML, extract the actual Calendar ID
+    if (cleanId.includes('src=')) {
+        try {
+            const match = cleanId.match(/src=([^&"]+)/);
+            if (match && match[1]) {
+                cleanId = decodeURIComponent(match[1]);
+            }
+        } catch (e) {}
+    }
+
+    const embedUrl = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(cleanId)}&ctz=${encodeURIComponent(tz || 'UTC')}&mode=WEEK`;
 
     return (
         <div className="flex-1 flex flex-col h-full">
