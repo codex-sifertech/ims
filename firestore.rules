@@ -57,11 +57,12 @@ service cloud.firestore {
       allow update: if isCompanyAdmin(companyId) || isMasterAdmin();
       allow delete: if isMasterAdmin();
 
-      // Members — only admins/owners can delete or remove members
+      // Members — admins can manage all; any authenticated user can create/update their own doc
       match /members/{memberId} {
         allow read: if isCompanyMember(companyId) || isMasterAdmin() || request.auth.uid == memberId;
         allow create, update: if isCompanyAdmin(companyId) || isMasterAdmin() ||
-                                 get(/databases/$(database)/documents/companies/$(companyId)).data.owner == request.auth.uid;
+                                 get(/databases/$(database)/documents/companies/$(companyId)).data.owner == request.auth.uid ||
+                                 request.auth.uid == memberId;
         allow delete: if isCompanyAdmin(companyId) || isMasterAdmin();
       }
 
@@ -162,6 +163,16 @@ service cloud.firestore {
         allow create: if isCompanyMember(companyId) &&
                          request.resource.data.userId == request.auth.uid;
         allow update, delete: if isCompanyAdmin(companyId);
+      }
+
+      // Meetings (Google Meet integration)
+      match /meetings/{meetingId} {
+        allow read: if isCompanyMember(companyId);
+        allow create: if isCompanyMember(companyId);
+        allow update: if isCompanyMember(companyId) &&
+                         resource.data.createdBy == request.auth.uid;
+        allow delete: if isCompanyAdmin(companyId) ||
+                         resource.data.createdBy == request.auth.uid;
       }
     }
 

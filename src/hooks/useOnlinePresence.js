@@ -4,8 +4,8 @@ import { db } from '../firebase';
 import useStore from '../store/useStore';
 
 /**
- * Manages isOnline / lastSeen fields on the current user's member doc.
- * Call once inside DashboardLayout.
+ * Manages isOnline / status / lastSeen fields on the current user's member doc.
+ * Consolidates all presence logic — called once inside DashboardLayout.
  */
 export function useOnlinePresence() {
     const { user, activeCompany } = useStore();
@@ -16,15 +16,27 @@ export function useOnlinePresence() {
         const memberRef = doc(db, 'companies', activeCompany.id, 'members', user.uid);
 
         const setOnline = () =>
-            setDoc(memberRef, { isOnline: true, lastSeen: serverTimestamp() }, { merge: true }).catch(() => {});
+            setDoc(memberRef, {
+                isOnline: true,
+                status: 'online',
+                lastSeen: serverTimestamp(),
+                lastActive: new Date().toISOString(),
+                name: user.name || user.displayName || user.email,
+                photoURL: user.photoURL || null,
+            }, { merge: true }).catch(() => {});
 
         const setOffline = () =>
-            setDoc(memberRef, { isOnline: false, lastSeen: serverTimestamp() }, { merge: true }).catch(() => {});
+            setDoc(memberRef, {
+                isOnline: false,
+                status: 'offline',
+                lastSeen: serverTimestamp(),
+                lastActive: new Date().toISOString(),
+            }, { merge: true }).catch(() => {});
 
         // Mark online immediately
         setOnline();
 
-        // Refresh lastSeen every 60s
+        // Refresh every 60s
         const interval = setInterval(setOnline, 60_000);
 
         // Mark offline on tab close

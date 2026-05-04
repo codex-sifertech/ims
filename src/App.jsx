@@ -124,8 +124,8 @@ function App() {
                 if (!memberSnap.exists()) {
                     await setDoc(memberRef, {
                         email: firebaseUser.email,
-                        name: firebaseUser.displayName || 'Admin',
-                        role: 'admin',
+                        name: firebaseUser.displayName || email?.split('@')[0] || 'User',
+                        role: userData.role === 'master_admin' ? 'admin' : 'member',
                         joinedAt: new Date().toISOString()
                     });
                 }
@@ -155,34 +155,8 @@ function App() {
 
     return () => unsubscribe();
   }, [setLoading, setCompanies, setUser, setActiveCompany]);
-  
-  // Presence/Active Status Sync
-  useEffect(() => {
-    if (!user?.uid || !activeCompany?.id) return;
 
-    const memberRef = doc(db, 'companies', activeCompany.id, 'members', user.uid);
 
-    const syncStatus = async (status = 'online') => {
-      try {
-        await setDoc(memberRef, {
-          status,
-          lastActive: new Date().toISOString(),
-          name: user.name || user.email,
-          photoURL: user.photoURL || null
-        }, { merge: true });
-      } catch (err) {
-        console.error("Presence sync failed:", err);
-      }
-    };
-
-    syncStatus('online');
-    const interval = setInterval(() => syncStatus('online'), 5 * 60 * 1000);
-
-    return () => {
-      clearInterval(interval);
-      syncStatus('offline');
-    };
-  }, [user?.uid, activeCompany?.id]);
 
   return (
     <Router>
