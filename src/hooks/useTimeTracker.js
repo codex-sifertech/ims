@@ -1,34 +1,38 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
-import { doc, onSnapshot, setDoc, addDoc, updateDoc, collection, query, where, getDocs, serverTimestamp, limit } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, addDoc, updateDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 
 export function useTimeTracker() {
     const { user, activeCompany, isCheckedIn, toggleCheckIn } = useStore();
     const sessionStartRef = useRef(null);
-    // Exposed so UI can compute elapsed seconds accurately after a page refresh
+    const openLogIdRef = useRef(null); // stores the Firestore doc ID of the open timelog
     const [sessionStart, setSessionStart] = useState(null);
 
-    // Sync check-in status FROM Firestore → store on mount
+    // Sync check-in status FROM Firestore → local state on mount / user change
     useEffect(() => {
         if (!user?.uid) return;
         const settingsRef = doc(db, 'users', user.uid, 'settings', 'attendance');
-        const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const remoteStatus = docSnap.data().isCheckedIn ?? false;
-                const remoteStart = docSnap.data().sessionStart ?? null;
-                toggleCheckIn(remoteStatus);
-                if (remoteStatus && remoteStart) {
-                    sessionStartRef.current = remoteStart;
-                    setSessionStart(remoteStart);
-                } else {
-                    sessionStartRef.current = null;
-                    setSessionStart(null);
-                }
+        const unsubscribe = onSnapshot(settingsRef, (snap) => {
+            if (!snap.exists()) return;
+            const data = snap.data();
+            const remoteCheckedIn = data.isCheckedIn ?? false;
+            const remoteStart     = data.sessionStart ?? null;
+            const remoteLogId     = data.openLogId    ?? null;
+
+            toggleCheckIn(remoteCheckedIn);
+
+            if (remoteCheckedIn && remoteStart) {
+                sessionStartRef.current = remoteStart;
+                openLogIdRef.current    = remoteLogId;
+                setSessionStart(remoteStart);
+            } else {
+                sessionStartRef.current = null;
+                openLogIdRef.current    = null;
+                setSessionStart(null);
             }
-        }, (err) => {
-            console.error('Time tracker sync error:', err);
-        });
+        }, (err) => console.error('Time tracker sync error:', err));
+
         return () => unsubscribe();
     }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -36,112 +40,132 @@ export function useTimeTracker() {
         if (!user?.uid || !activeCompany?.id) return;
 
         const newStatus = !isCheckedIn;
-        const statusString = newStatus ? 'active' : 'checked-out';
 
-        // Optimistic local update
-        toggleCheckIn(newStatus);
+        // ── CHECK IN ──────────────────────────────────────────────────────────
+        if (newStatus) {
+            const now    = new Date();
+            const isoNow = now.toISOString();
+            const dateStr = isoNow.split('T')[0];
 
-        const settingsRef = doc(db, 'users', user.uid, 'settings', 'attendance');
-        const memberRef = doc(db, 'companies', activeCompany.id, 'members', user.uid);
-        const attendanceRef = collection(db, 'companies', activeCompany.id, 'attendance');
-        const timeLogsRef = collection(db, 'companies', activeCompany.id, 'timeLogs');
+            // Optimistic UI
+            sessionStartRef.current = isoNow;
+            setSessionStart(isoNow);
+            toggleCheckIn(true);
 
-        try {
-            if (newStatus) {
-                // ── CHECK IN ──
-                const now = new Date();
-                const isoNow = now.toISOString();
-                sessionStartRef.current = isoNow;
-                setSessionStart(isoNow);
+            const settingsRef  = doc(db, 'users', user.uid, 'settings', 'attendance');
+            const memberRef    = doc(db, 'companies', activeCompany.id, 'members', user.uid);
+            const timeLogsRef  = collection(db, 'companies', activeCompany.id, 'timeLogs');
+            const attendanceRef = collection(db, 'companies', activeCompany.id, 'attendance');
 
-                // Persist session start
+            try {
+                // Write the open timelog first — we need its ID
+                const logRef = await addDoc(timeLogsRef, {
+                    userId:          user.uid,
+                    userName:        user.name || user.email,
+                    startTime:       isoNow,
+                    endTime:         null,
+                    durationMinutes: null,
+                    date:            dateStr,
+                    companyId:       activeCompany.id,
+                });
+                openLogIdRef.current = logRef.id;
+
+                // Persist settings — include the logId so checkout can find it without a query
                 await setDoc(settingsRef, {
                     isCheckedIn: true,
-                    sessionStart: isoNow
+                    sessionStart: isoNow,
+                    openLogId:   logRef.id,
                 }, { merge: true });
 
-                // Update member presence
-                await setDoc(memberRef, {
-                    status: 'active',
+                // Member presence (non-blocking failures ok)
+                setDoc(memberRef, {
+                    status:      'active',
                     isCheckedIn: true,
-                    lastSeen: serverTimestamp()
+                    lastSeen:    serverTimestamp(),
+                }, { merge: true }).catch(e => console.warn('member presence update failed:', e));
+
+                // Attendance event
+                addDoc(attendanceRef, {
+                    userId:   user.uid,
+                    userName: user.name || user.email,
+                    type:     'check-in',
+                    timestamp: serverTimestamp(),
+                    isoDate:  isoNow,
+                }).catch(e => console.warn('attendance log failed:', e));
+
+            } catch (err) {
+                console.error('Check-in failed:', err);
+                // Revert optimistic state
+                sessionStartRef.current = null;
+                openLogIdRef.current    = null;
+                setSessionStart(null);
+                toggleCheckIn(false);
+            }
+
+        // ── CHECK OUT ─────────────────────────────────────────────────────────
+        } else {
+            const now    = new Date();
+            const isoNow = now.toISOString();
+
+            // Save old values for revert if needed
+            const prevStart = sessionStartRef.current;
+            const prevLogId = openLogIdRef.current;
+
+            // Optimistic UI — stop the timer immediately
+            toggleCheckIn(false);
+            setSessionStart(null);
+            sessionStartRef.current = null;
+            openLogIdRef.current    = null;
+
+            const settingsRef   = doc(db, 'users', user.uid, 'settings', 'attendance');
+            const memberRef     = doc(db, 'companies', activeCompany.id, 'members', user.uid);
+            const timeLogsRef   = collection(db, 'companies', activeCompany.id, 'timeLogs');
+            const attendanceRef = collection(db, 'companies', activeCompany.id, 'attendance');
+
+            try {
+                // ── CRITICAL: persist checkout status ──────────────────────────
+                await setDoc(settingsRef, {
+                    isCheckedIn:  false,
+                    sessionStart: null,
+                    openLogId:    null,
                 }, { merge: true });
 
-                // Log attendance event
-                await addDoc(attendanceRef, {
-                    userId: user.uid,
-                    userName: user.name || user.email,
-                    type: 'check-in',
-                    timestamp: serverTimestamp(),
-                    isoDate: isoNow
-                });
+                // ── CRITICAL: update member presence ──────────────────────────
+                await setDoc(memberRef, {
+                    status:      'checked-out',
+                    isCheckedIn: false,
+                    lastSeen:    serverTimestamp(),
+                }, { merge: true });
 
-                // Write open time log (endTime = null means session still open)
-                await addDoc(timeLogsRef, {
-                    userId: user.uid,
-                    userName: user.name || user.email,
-                    startTime: isoNow,
-                    endTime: null,
-                    durationMinutes: null,
-                    date: now.toISOString().split('T')[0], // YYYY-MM-DD
-                    companyId: activeCompany.id,
-                });
-
-            } else {
-                // ── CHECK OUT ──
-                const now = new Date();
-                const isoNow = now.toISOString();
-
-                // Find the open time log for this user (endTime == null)
-                const openLogQuery = query(
-                    timeLogsRef,
-                    where('userId', '==', user.uid),
-                    where('endTime', '==', null),
-                    limit(1)
-                );
-                const openLogSnap = await getDocs(openLogQuery);
-
-                if (!openLogSnap.empty) {
-                    const logDoc = openLogSnap.docs[0];
-                    const startTime = sessionStartRef.current || logDoc.data().startTime;
-                    const durationMinutes = startTime
-                        ? Math.round((now - new Date(startTime)) / 60000)
+                // ── NON-CRITICAL: close the open timelog ──────────────────────
+                // Use the stored doc ID — no compound query needed, no missing index
+                if (prevLogId) {
+                    const durationMinutes = prevStart
+                        ? Math.round((now - new Date(prevStart)) / 60000)
                         : 0;
-
-                    await updateDoc(logDoc.ref, {
-                        endTime: isoNow,
-                        durationMinutes,
-                    });
+                    updateDoc(doc(timeLogsRef, prevLogId), {
+                        endTime:         isoNow,
+                        durationMinutes: Math.max(0, durationMinutes),
+                    }).catch(e => console.warn('timelog close failed:', e));
                 }
 
-                sessionStartRef.current = null;
-                setSessionStart(null);
-
-                // Persist checkout
-                await setDoc(settingsRef, {
-                    isCheckedIn: false,
-                    sessionStart: null
-                }, { merge: true });
-
-                // Update member presence
-                await setDoc(memberRef, {
-                    status: 'checked-out',
-                    isCheckedIn: false,
-                    lastSeen: serverTimestamp()
-                }, { merge: true });
-
-                // Log attendance event
-                await addDoc(attendanceRef, {
-                    userId: user.uid,
-                    userName: user.name || user.email,
-                    type: 'check-out',
+                // ── NON-CRITICAL: attendance event ────────────────────────────
+                addDoc(attendanceRef, {
+                    userId:    user.uid,
+                    userName:  user.name || user.email,
+                    type:      'check-out',
                     timestamp: serverTimestamp(),
-                    isoDate: isoNow
-                });
+                    isoDate:   isoNow,
+                }).catch(e => console.warn('attendance log failed:', e));
+
+            } catch (err) {
+                console.error('Check-out failed:', err);
+                // Only revert if the critical writes failed
+                toggleCheckIn(true);
+                setSessionStart(prevStart);
+                sessionStartRef.current = prevStart;
+                openLogIdRef.current    = prevLogId;
             }
-        } catch (error) {
-            console.error('Error toggling check-in:', error);
-            toggleCheckIn(!newStatus);
         }
     }, [user, activeCompany, isCheckedIn, toggleCheckIn]);
 
