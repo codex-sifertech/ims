@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Square, Clock, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 import useStore from '../../store/useStore';
 
