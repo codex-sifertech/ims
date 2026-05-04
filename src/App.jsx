@@ -5,6 +5,7 @@ import { auth, db } from './firebase';
 import { collection, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
 import useStore from './store/useStore';
 import { USER_ROLES, accessList } from './config/accessControl';
+import { createWorkspaceCalendar } from './utils/workspaceCalendar';
 
 // Components
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -83,14 +84,25 @@ function App() {
             
             // Fetch real companies from Firestore
             const companiesRef = collection(db, 'companies');
-            // Firebase strictly requires the query to identically match the rule `request.auth.token.email in accessList`!
+            // Query with the exact email token (Firebase rules match on request.auth.token.email)
             const q = query(companiesRef, where('accessList', 'array-contains', firebaseUser.email));
+            // Also query lowercase variant to catch workspaces created with normalized email
+            const qLower = email !== firebaseUser.email
+                ? query(companiesRef, where('accessList', 'array-contains', email))
+                : null;
             const companySnaps = await getDocs(q);
-            
-            let fetchedCompanies = companySnaps.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-            }));
+            const seenIds = new Set();
+            let fetchedCompanies = [];
+            companySnaps.docs.forEach(d => {
+                seenIds.add(d.id);
+                fetchedCompanies.push({ id: d.id, ...d.data() });
+            });
+            if (qLower) {
+                const lowerSnaps = await getDocs(qLower);
+                lowerSnaps.docs.forEach(d => {
+                    if (!seenIds.has(d.id)) fetchedCompanies.push({ id: d.id, ...d.data() });
+                });
+            }
 
             // Auto-create a Main Workspace if none exist (specifically for the admin)
             if (fetchedCompanies.length === 0 && userData.role === USER_ROLES.MASTER_ADMIN) {
@@ -99,7 +111,7 @@ function App() {
             const newCompanyData = {
                 name: 'Main Workspace',
                 createdAt: new Date().toISOString(),
-                accessList: [firebaseUser.email],
+                accessList: [...new Set([firebaseUser.email, email])],
                 owner: firebaseUser.uid
             };
             await setDoc(newCompanyRef, newCompanyData);
@@ -114,6 +126,9 @@ function App() {
             });
             
             fetchedCompanies = [{ id: newCompanyId, ...newCompanyData }];
+
+            // Auto-create workspace calendar (non-blocking)
+            createWorkspaceCalendar(firebaseUser.uid, 'Main Workspace', newCompanyId).catch(() => {});
             }
 
             // Repair logic: Ensure user has a membership doc for all fetched companies

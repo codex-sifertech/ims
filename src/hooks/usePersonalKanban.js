@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import useStore from '../store/useStore';
 import { useGlobalTasks } from './useGlobalTasks';
 

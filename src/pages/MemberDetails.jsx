@@ -78,10 +78,9 @@ export default function MemberDetails() {
 
     const stats = useMemo(() => {
         if (!logs.length) return { totalHours: 0, avgCheckIn: 'N/A', streak: 0 };
-        
+
         const totalMinutes = logs.reduce((acc, curr) => acc + (curr.duration || 0), 0);
-        
-        // Calculate Streak
+
         let streak = 0;
         const now = new Date();
         for (let i = 0; i < 30; i++) {
@@ -91,10 +90,23 @@ export default function MemberDetails() {
             else if (i > 0) break;
         }
 
+        const checkIns = logs.filter(l => l.type === 'check-in' && l.timestamp);
+        let avgCheckIn = 'N/A';
+        if (checkIns.length > 0) {
+            const totalMins = checkIns.reduce((sum, l) => {
+                const d = new Date(l.timestamp);
+                return sum + d.getHours() * 60 + d.getMinutes();
+            }, 0);
+            const avgMins = Math.round(totalMins / checkIns.length);
+            const h = Math.floor(avgMins / 60).toString().padStart(2, '0');
+            const m = (avgMins % 60).toString().padStart(2, '0');
+            avgCheckIn = `${h}:${m}`;
+        }
+
         return {
             totalHours: (totalMinutes / 60).toFixed(1),
             streak,
-            avgCheckIn: '09:12' // Mock for now
+            avgCheckIn
         };
     }, [logs]);
 

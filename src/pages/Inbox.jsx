@@ -23,7 +23,7 @@ function Avatar({ name, size = 8 }) {
     );
 }
 
-function MessageBubble({ msg, showHeader, isMe, onReact, taskPath }) {
+function MessageBubble({ msg, showHeader, isMe, onReact, currentUserId }) {
     const [hover, setHover] = useState(false);
     const time = msg.createdAt?.toDate ? format(msg.createdAt.toDate(), 'HH:mm') : '...';
     return (
@@ -56,7 +56,7 @@ function MessageBubble({ msg, showHeader, isMe, onReact, taskPath }) {
                         {Object.entries(msg.reactions).filter(([,uids]) => uids?.length > 0).map(([emoji, uids]) => (
                             <button key={emoji} onClick={() => onReact(msg.id, emoji)}
                                 className={`text-xs px-2 py-0.5 rounded-full border transition-all ${
-                                    uids.includes(useStore.getState().user?.uid)
+                                    uids.includes(currentUserId)
                                         ? 'bg-primary-500/20 border-primary-500/40 text-primary-300'
                                         : 'bg-dark-700 border-dark-600 text-slate-400 hover:border-dark-500'
                                 }`}>
@@ -447,7 +447,7 @@ export default function Inbox() {
                     ) : (
                         groupedMessages.map(msg => (
                             <MessageBubble key={msg.id} msg={msg} showHeader={msg.showHeader}
-                                isMe={msg.senderId === user?.uid} onReact={handleReact} />
+                                isMe={msg.senderId === user?.uid} onReact={handleReact} currentUserId={user?.uid} />
                         ))
                     )}
                     <div ref={messagesEndRef} />

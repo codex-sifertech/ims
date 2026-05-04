@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, collectionGroup, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where } from 'firebase/firestore';
 import { db, storage } from '../firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import useStore from '../store/useStore';
@@ -82,11 +82,13 @@ export function useGlobalTasks() {
                 }
                 
                 if (change.type === 'removed') {
-                    // Cleanup removed project listener
                     const unsubP = projectTaskUnsubs.get(projectId);
-                    if (unsubP) unsubP();
+                    if (unsubP) {
+                        unsubP();
+                        const idx = unsubscribes.indexOf(unsubP);
+                        if (idx !== -1) unsubscribes.splice(idx, 1);
+                    }
                     projectTaskUnsubs.delete(projectId);
-                    // Remove its tasks from memory
                     for (const [path, task] of allTasks.entries()) {
                         if (task.projectId === projectId) allTasks.delete(path);
                     }
@@ -117,7 +119,6 @@ export function useGlobalTasks() {
 
         return () => {
             unsubscribes.forEach(unsub => unsub());
-            projectTaskUnsubs.forEach(unsub => unsub());
         };
     }, [activeCompany?.id, user?.uid, setGlobalTasks]);
 

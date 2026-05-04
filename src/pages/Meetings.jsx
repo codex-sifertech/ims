@@ -6,6 +6,7 @@ import {
 import { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
+import { addEventToWorkspaceCalendar } from '../utils/workspaceCalendar';
 import { format, isToday, isTomorrow, isPast, isFuture, addMinutes } from 'date-fns';
 
 const MEETING_DURATIONS = [
@@ -363,12 +364,25 @@ export default function Meetings() {
 
     const handleCreateMeeting = async (meetingData) => {
         if (!activeCompany?.id) return;
-        await addDoc(collection(db, 'companies', activeCompany.id, 'meetings'), {
+        const meetingDoc = {
             ...meetingData,
             createdBy: user.uid,
             createdByName: user.name || user.email,
             createdAt: new Date().toISOString(),
-        });
+        };
+        const docRef = await addDoc(collection(db, 'companies', activeCompany.id, 'meetings'), meetingDoc);
+
+        // Sync to workspace Google Calendar (non-blocking)
+        addEventToWorkspaceCalendar(user.uid, activeCompany.id, {
+            id: docRef.id,
+            title: meetingData.title,
+            description: meetingData.description,
+            startTime: meetingData.scheduledAt,
+            endTime: meetingData.endsAt,
+            meetLink: meetingData.meetLink,
+            attendees: members.filter(m => meetingData.participants?.some(p => p.id === m.id)).map(m => ({ email: m.email })),
+            sourceType: 'meeting',
+        }).catch(() => {});
     };
 
     const handleDeleteMeeting = async (meetingId) => {

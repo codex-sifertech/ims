@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, addDoc, serverTimestamp, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 
@@ -43,7 +43,6 @@ export function useProjects() {
         }
 
         try {
-            console.log("Creating project under company:", activeCompany.id);
             const projectsRef = collection(db, 'companies', activeCompany.id, 'projects');
             
             const docRef = await addDoc(projectsRef, {

@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { collection, doc, setDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import useStore from '../store/useStore';
-import { Building2, Plus, ArrowRight, Loader2, ChevronRight, X, LogOut } from 'lucide-react';
+import { Building2, Plus, ArrowRight, Loader2, ChevronRight, X, LogOut, CalendarDays } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { createWorkspaceCalendar } from '../utils/workspaceCalendar';
 
 const BG_IMAGES = [
     "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920&auto=format&fit=crop",
@@ -38,26 +39,36 @@ export default function CompanySelection() {
         setIsSaving(true);
         try {
             const newCompanyRef = doc(collection(db, 'companies'));
-            
+            const email = user.email;
+            const emailLower = email.toLowerCase();
+
             const newCompanyData = {
                 name: newCompanyName.trim(),
                 createdAt: new Date().toISOString(),
-                // Push EXACT token casing, plus lowercase backup just in case of future cross-platform invites
-                accessList: [...new Set([user.email, user.email.toLowerCase()])],
+                accessList: [...new Set([email, emailLower])],
                 owner: user.uid,
             };
-            
-            // 1. Create company FIRST. This satisfies get().data.owner check sequentially
-            await setDoc(newCompanyRef, newCompanyData);
-            
-            // 2. Create the member doc. It will now successfully verify against the live company doc.
+
             const memberRef = doc(db, 'companies', newCompanyRef.id, 'members', user.uid);
-            await setDoc(memberRef, {
-                email: user.email, // Exact token
+            const memberData = {
+                email: email,
                 name: user.name || user.displayName || 'Creator',
                 role: 'admin',
                 joinedAt: new Date().toISOString(),
-            });
+            };
+
+            // Atomic batch: company + member created together
+            const batch = writeBatch(db);
+            batch.set(newCompanyRef, newCompanyData);
+            batch.set(memberRef, memberData);
+            await batch.commit();
+
+            // Auto-create a workspace Google Calendar (non-blocking)
+            createWorkspaceCalendar(user.uid, newCompanyName.trim(), newCompanyRef.id)
+                .then(calId => {
+                    if (calId) console.log('Workspace calendar created:', calId);
+                })
+                .catch(() => {});
 
             const newCompany = { id: newCompanyRef.id, ...newCompanyData };
             setCompanies([...companies, newCompany]);

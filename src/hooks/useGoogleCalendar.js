@@ -2,13 +2,10 @@ import { useCallback } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
+import { addEventToWorkspaceCalendar } from '../utils/workspaceCalendar';
 
-/**
- * Hook for creating/updating Google Calendar events when task due dates are set.
- * Reads the stored access token from users/{uid}/integrations/google_calendar.
- */
 export function useGoogleCalendar() {
-    const { user } = useStore();
+    const { user, activeCompany } = useStore();
 
     const getToken = useCallback(async () => {
         if (!user?.uid) return null;
@@ -70,10 +67,21 @@ export function useGoogleCalendar() {
                     }
                 );
             }
+            // Also sync to the workspace calendar
+            if (activeCompany?.id) {
+                addEventToWorkspaceCalendar(user.uid, activeCompany.id, {
+                    id: task.id,
+                    title: task.title || 'Task Due',
+                    description: task.description || '',
+                    startTime: start.toISOString(),
+                    endTime: end.toISOString(),
+                    sourceType: 'task',
+                }).catch(() => {});
+            }
         } catch (err) {
             console.error('Google Calendar sync error:', err);
         }
-    }, [getToken]);
+    }, [getToken, user?.uid, activeCompany?.id]);
 
     return { createOrUpdateEvent };
 }

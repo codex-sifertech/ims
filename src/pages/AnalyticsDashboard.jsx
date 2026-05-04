@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTimeTracker } from '../hooks/useTimeTracker';
 import {
@@ -23,6 +23,7 @@ const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 export default function AnalyticsDashboard() {
     const { activeCompany, globalTasks } = useStore();
     const { isCheckedIn, toggleCheckIn } = useTimeTracker();
+    const [isToggling, setIsToggling] = useState(false);
     const { projects, loading: projectsLoading } = useProjects();
     const [searchParams] = useSearchParams();
     
@@ -117,15 +118,22 @@ export default function AnalyticsDashboard() {
                             Operational
                         </div>
                     </div>
-                    <button 
-                        onClick={toggleCheckIn}
-                        className={`group relative flex items-center gap-3 px-8 py-3.5 rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl transition-all overflow-hidden ${
-                            isCheckedIn 
-                            ? 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 shadow-rose-500/10 border border-rose-500/30' 
+                    <button
+                        onClick={async () => {
+                            if (isToggling) return;
+                            setIsToggling(true);
+                            try { await toggleCheckIn(); } finally { setIsToggling(false); }
+                        }}
+                        disabled={isToggling}
+                        className={`group relative flex items-center gap-3 px-8 py-3.5 rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl transition-all overflow-hidden disabled:opacity-50 ${
+                            isCheckedIn
+                            ? 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 shadow-rose-500/10 border border-rose-500/30'
                             : 'bg-primary-600 text-white hover:bg-primary-500 shadow-primary-500/40 border border-primary-400/20'
                         }`}
                     >
-                        {isCheckedIn ? (
+                        {isToggling ? (
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : isCheckedIn ? (
                             <><LogOut size={18} /> Finish Shift</>
                         ) : (
                             <><LogIn size={18} /> Initialize Session</>

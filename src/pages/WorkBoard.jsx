@@ -3,6 +3,7 @@ import { LayoutDashboard, StickyNote, Target, CalendarDays, Route } from 'lucide
 import VisionBoard from '../components/dashboard/VisionBoard';
 import WorkKanban from '../components/work/WorkKanban';
 import NotesSection from '../components/work/NotesSection';
+import WorkspaceCalendar from '../components/shared/WorkspaceCalendar';
 
 export default function WorkBoard() {
     const [activeTab, setActiveTab] = useState('kanban');
@@ -44,11 +45,7 @@ export default function WorkBoard() {
                 {activeTab === 'kanban' && <WorkKanban />}
                 {activeTab === 'notes' && <NotesSection />}
                 {activeTab === 'vision' && <div className="h-full max-w-2xl"><VisionBoard /></div>}
-                {activeTab === 'calendar' && (
-                    <div className="h-full flex items-center justify-center text-slate-500 border border-dark-700 rounded-xl bg-dark-800 border-dashed">
-                        Calendar View (Integration Placeholder)
-                    </div>
-                )}
+                {activeTab === 'calendar' && <WorkspaceCalendar />}
                 {activeTab === 'roadmap' && (
                     <div className="h-full flex items-center justify-center text-slate-500 border border-dark-700 rounded-xl bg-dark-800 border-dashed">
                         Roadmap View (Integration Placeholder)
