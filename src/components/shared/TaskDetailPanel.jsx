@@ -127,10 +127,10 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, mem
   const [title, setTitle] = useState(task?.title || '');
   const [status, setStatus] = useState(task?.status || 'todo');
   const [priority, setPriority] = useState(task?.priority || 'Medium');
-  const [startDate, setStartDate] = useState(task?.startDate || '');
+  const [startDate, setStartDate] = useState(task?.startDate || (isNewTask ? new Date().toISOString().split('T')[0] : ''));
   const [dueDate, setDueDate] = useState(task?.dueDate || '');
   const [description, setDescription] = useState(task?.description || '');
-  const [assignees, setAssignees] = useState(task?.assignedTo || []);
+  const [assignees, setAssignees] = useState(task?.assignedTo || (isNewTask && user ? [{ id: user.uid, name: user.name, photoURL: user.photoURL, email: user.email }] : []));
   const [showAssigneeSearch, setShowAssigneeSearch] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
   
