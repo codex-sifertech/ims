@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Loader2, Trash2, FolderOpen, MoreVertical, Search, Paperclip, ListTodo } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useGlobalTasks } from '../../hooks/useGlobalTasks';
 import useStore from '../../store/useStore';
-import { doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import TaskDetailPanel from '../shared/TaskDetailPanel';
 
@@ -25,14 +25,25 @@ const PROJECT_COLORS = [
 ];
 
 export default function GlobalTaskBoard() {
-    const { globalTasks, tasksLoading } = useStore();
-    const { addTask, deleteTask } = useGlobalTasks();
+    const { globalTasks, tasksLoading, activeCompany } = useStore();
+    const { addTaskToCompany, deleteTask } = useGlobalTasks();
     const [isAddingCard, setIsAddingCard] = useState(null);
     const [newCardTitle, setNewCardTitle] = useState('');
     const [newCardPriority, setNewCardPriority] = useState('Medium');
     const [newCardAssignee, setNewCardAssignee] = useState('');
     const [newCardTags, setNewCardTags] = useState('');
     const [selectedTask, setSelectedTask] = useState(null);
+    const [members, setMembers] = useState([]);
+
+    // Load workspace members for assignee picker
+    useEffect(() => {
+        if (!activeCompany?.id) return;
+        const membersRef = collection(db, 'companies', activeCompany.id, 'members');
+        const unsub = onSnapshot(membersRef, (snap) => {
+            setMembers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return unsub;
+    }, [activeCompany?.id]);
 
     const getProjectColorClass = (title) => {
         if (!title) return PROJECT_COLORS[0];
@@ -262,11 +273,11 @@ export default function GlobalTaskBoard() {
             {selectedTask && (
                 <TaskDetailPanel
                     task={selectedTask}
-                    members={[]}
+                    members={members}
                     onClose={() => setSelectedTask(null)}
                     onUpdate={(updates) => setSelectedTask(t => ({ ...t, ...updates }))}
                     onCreate={async (taskData) => {
-                        await addTask({
+                        await addTaskToCompany({
                             ...taskData,
                             type: 'company',
                             tags: taskData.tags || []

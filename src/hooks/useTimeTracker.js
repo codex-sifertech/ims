@@ -37,7 +37,10 @@ export function useTimeTracker() {
     }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleCheckInToggle = useCallback(async () => {
-        if (!user?.uid || !activeCompany?.id) return;
+        if (!user?.uid || !activeCompany?.id) {
+            console.warn('[TimeTracker] Cannot toggle — missing user or activeCompany', { user: !!user, activeCompany: !!activeCompany });
+            return;
+        }
 
         const newStatus = !isCheckedIn;
 

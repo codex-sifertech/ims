@@ -114,141 +114,164 @@ function DrillDownModal({ member, logs, onClose }) {
     );
 }
 
-function InviteMemberModal({ activeCompany, user, onClose }) {
-    const [email, setEmail] = useState('');
-    const [name, setName] = useState('');
-    const [role, setRole] = useState('member');
-    const [status, setStatus] = useState(null); // null | 'loading' | 'success' | 'error'
-    const [errMsg, setErrMsg] = useState('');
+function AddSystemMemberModal({ activeCompany, user, existingMembers, onClose }) {
+    const [allUsers, setAllUsers] = useState([]);
+    const [searchQ, setSearchQ] = useState('');
+    const [loadingUsers, setLoadingUsers] = useState(true);
+    const [addingId, setAddingId] = useState(null);
+    const [successIds, setSuccessIds] = useState(new Set());
 
-    const handleInvite = async () => {
-        const trimmedEmail = email.trim().toLowerCase();
-        if (!trimmedEmail || !name.trim()) {
-            setErrMsg('Name and email are required.');
-            setStatus('error');
-            return;
-        }
-        setStatus('loading');
-        setErrMsg('');
-        try {
-            // Check if already a member by email
-            const membersRef = collection(db, 'companies', activeCompany.id, 'members');
-            const existing = await getDocs(query(membersRef, where('email', '==', trimmedEmail)));
-            if (!existing.empty) {
-                setErrMsg('This email is already a member of the workspace.');
-                setStatus('error');
-                return;
+    // Fetch ALL registered users from the system
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const usersRef = collection(db, 'users');
+                const snap = await getDocs(usersRef);
+                setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            } catch (err) {
+                console.error('Failed to fetch system users:', err);
+            } finally {
+                setLoadingUsers(false);
             }
+        };
+        fetchUsers();
+    }, []);
 
-            // Add a pending member document (uid = email placeholder until they log in)
-            const pendingId = `pending_${Date.now()}`;
-            await setDoc(doc(db, 'companies', activeCompany.id, 'members', pendingId), {
-                email: trimmedEmail,
-                name: name.trim(),
-                role,
-                status: 'invited',
-                invitedBy: user.uid,
-                invitedAt: new Date().toISOString(),
-                isPending: true,
+    const existingIds = useMemo(() => new Set(existingMembers.map(m => m.id)), [existingMembers]);
+
+    const filteredUsers = useMemo(() => {
+        const q = searchQ.toLowerCase();
+        return allUsers.filter(u => {
+            if (!q) return true;
+            return u.name?.toLowerCase().includes(q) ||
+                   u.email?.toLowerCase().includes(q) ||
+                   u.displayName?.toLowerCase().includes(q);
+        });
+    }, [allUsers, searchQ]);
+
+    const handleAddUser = async (sysUser) => {
+        if (!activeCompany?.id || addingId) return;
+        setAddingId(sysUser.id);
+        try {
+            // Create real member doc using their actual UID
+            await setDoc(doc(db, 'companies', activeCompany.id, 'members', sysUser.id), {
+                email: sysUser.email,
+                name: sysUser.name || sysUser.displayName || sysUser.email?.split('@')[0] || 'User',
+                role: 'member',
+                photoURL: sysUser.photoURL || null,
+                joinedAt: new Date().toISOString(),
+                addedBy: user.uid,
             });
 
-            // Add email to company accessList so they can log in and see this workspace
+            // Ensure email is in company accessList
             const companyRef = doc(db, 'companies', activeCompany.id);
             const companySnap = await getDoc(companyRef);
             if (companySnap.exists()) {
                 const currentList = companySnap.data().accessList || [];
-                if (!currentList.includes(trimmedEmail)) {
-                    await setDoc(companyRef, { accessList: [...currentList, trimmedEmail] }, { merge: true });
+                if (!currentList.includes(sysUser.email)) {
+                    await setDoc(companyRef, { accessList: [...currentList, sysUser.email] }, { merge: true });
                 }
             }
 
-            setStatus('success');
+            setSuccessIds(prev => new Set([...prev, sysUser.id]));
         } catch (err) {
-            console.error('Invite error:', err);
-            setErrMsg(err.message || 'Failed to invite member.');
-            setStatus('error');
+            console.error('Add member error:', err);
+            alert('Failed to add member: ' + (err.message || 'Unknown error'));
+        } finally {
+            setAddingId(null);
         }
     };
 
     return (
         <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
-            <div className="bg-dark-900 border border-dark-700 rounded-3xl w-full max-w-md shadow-2xl">
-                <div className="flex items-center justify-between p-6 border-b border-dark-700">
+            <div className="bg-dark-900 border border-dark-700 rounded-3xl w-full max-w-lg shadow-2xl max-h-[80vh] flex flex-col">
+                <div className="flex items-center justify-between p-6 border-b border-dark-700 shrink-0">
                     <h3 className="text-lg font-black text-white uppercase tracking-tight flex items-center gap-2">
-                        <UserPlus size={20} className="text-primary-400" /> Invite Member
+                        <UserPlus size={20} className="text-primary-400" /> Add Team Member
                     </h3>
                     <button onClick={onClose} className="p-2 text-slate-500 hover:text-white rounded-lg hover:bg-dark-700">
                         <X size={18} />
                     </button>
                 </div>
 
-                {status === 'success' ? (
-                    <div className="p-8 flex flex-col items-center gap-4 text-center">
-                        <div className="w-14 h-14 bg-emerald-500/10 rounded-full flex items-center justify-center">
-                            <CheckCircle2 size={28} className="text-emerald-400" />
-                        </div>
-                        <p className="text-white font-bold">Member added to workspace!</p>
-                        <p className="text-slate-400 text-sm">
-                            <span className="text-primary-400">{email}</span> will have access when they log in.
-                        </p>
-                        <button onClick={onClose}
-                            className="mt-2 px-6 py-2.5 bg-primary-600 hover:bg-primary-500 text-white text-sm font-bold rounded-xl transition-colors">
-                            Done
-                        </button>
-                    </div>
-                ) : (
-                    <div className="p-6 space-y-4">
-                        <div>
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Full Name</label>
-                            <input
-                                type="text"
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                                placeholder="e.g. John Doe"
-                                className="w-full bg-dark-800 border border-dark-600 focus:border-primary-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none transition-colors"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Email Address</label>
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={e => setEmail(e.target.value)}
-                                placeholder="member@company.com"
-                                className="w-full bg-dark-800 border border-dark-600 focus:border-primary-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none transition-colors"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Role</label>
-                            <select
-                                value={role}
-                                onChange={e => setRole(e.target.value)}
-                                className="w-full bg-dark-800 border border-dark-600 focus:border-primary-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none transition-colors"
-                            >
-                                <option value="member">Member</option>
-                                <option value="admin">Admin</option>
-                                <option value="operation_manager">Operation Manager</option>
-                            </select>
-                        </div>
-
-                        {status === 'error' && (
-                            <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 text-rose-400 text-sm">
-                                <AlertCircle size={16} /> {errMsg}
-                            </div>
+                {/* Search */}
+                <div className="px-6 pt-4 pb-3 border-b border-dark-700 shrink-0">
+                    <div className="bg-dark-800 border border-dark-600 rounded-xl px-4 py-2.5 flex items-center gap-3 focus-within:border-primary-500/50 transition-colors">
+                        <Search size={16} className="text-slate-500 shrink-0" />
+                        <input
+                            type="text"
+                            autoFocus
+                            value={searchQ}
+                            onChange={e => setSearchQ(e.target.value)}
+                            placeholder="Search users by name or email..."
+                            className="bg-transparent border-none text-sm text-white outline-none w-full placeholder:text-slate-600"
+                        />
+                        {searchQ && (
+                            <button onClick={() => setSearchQ('')}>
+                                <X size={14} className="text-slate-500 hover:text-white" />
+                            </button>
                         )}
-
-                        <button
-                            onClick={handleInvite}
-                            disabled={status === 'loading'}
-                            className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary-600 hover:bg-primary-500 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                            {status === 'loading'
-                                ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Adding...</>
-                                : <><UserPlus size={16} /> Add to Workspace</>
-                            }
-                        </button>
                     </div>
-                )}
+                    <p className="text-[10px] font-bold text-slate-500 mt-2">
+                        {filteredUsers.length} users found in system · {existingIds.size} already in workspace
+                    </p>
+                </div>
+
+                {/* User List */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
+                    {loadingUsers ? (
+                        <div className="flex flex-col items-center justify-center py-12 gap-3">
+                            <div className="w-8 h-8 border-3 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Loading system users...</p>
+                        </div>
+                    ) : filteredUsers.length === 0 ? (
+                        <div className="py-12 text-center text-slate-600 font-bold text-sm">No users found</div>
+                    ) : (
+                        filteredUsers.map(sysUser => {
+                            const isAlready = existingIds.has(sysUser.id) || successIds.has(sysUser.id);
+                            const isAdding = addingId === sysUser.id;
+                            return (
+                                <div key={sysUser.id}
+                                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                                        isAlready
+                                            ? 'bg-emerald-500/5 border-emerald-500/20'
+                                            : 'bg-dark-800/50 border-white/5 hover:border-white/10'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-9 h-9 rounded-xl bg-dark-800 border border-white/5 flex items-center justify-center text-slate-400 overflow-hidden shrink-0">
+                                            {sysUser.photoURL
+                                                ? <img src={sysUser.photoURL} alt="" className="w-full h-full object-cover" />
+                                                : <span className="text-xs font-black uppercase">{(sysUser.name || sysUser.email || '?').charAt(0)}</span>
+                                            }
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-white">{sysUser.name || sysUser.displayName || 'User'}</p>
+                                            <p className="text-[10px] text-slate-500 font-medium">{sysUser.email}</p>
+                                        </div>
+                                    </div>
+                                    {isAlready ? (
+                                        <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full uppercase tracking-widest">
+                                            ✓ In Workspace
+                                        </span>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleAddUser(sysUser)}
+                                            disabled={isAdding}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-60"
+                                        >
+                                            {isAdding
+                                                ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                : <UserPlus size={12} />
+                                            }
+                                            {isAdding ? 'Adding...' : 'Add'}
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -528,7 +551,7 @@ export default function PeopleHR() {
                                 onClick={() => setShowInvite(true)}
                                 className="flex items-center gap-2 px-5 py-3 bg-primary-600 hover:bg-primary-500 text-white text-sm font-bold rounded-2xl transition-colors"
                             >
-                                <UserPlus size={18} /> Invite Member
+                                <UserPlus size={18} /> Add Member
                             </button>
                         )}
                     </div>
@@ -684,11 +707,7 @@ export default function PeopleHR() {
                                                         <h4 className="text-sm font-black text-white group-hover:text-primary-400 transition-colors">
                                                             {member.name || 'Anonymous'}
                                                         </h4>
-                                                        {member.isPending && (
-                                                            <span className="text-[9px] font-black bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full uppercase">
-                                                                Invited
-                                                            </span>
-                                                        )}
+
                                                     </div>
                                                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
                                                         {member.role === 'admin' && <Shield size={9} className="text-primary-400" />}
@@ -893,9 +912,10 @@ export default function PeopleHR() {
                 />
             )}
             {showInvite && (
-                <InviteMemberModal
+                <AddSystemMemberModal
                     activeCompany={activeCompany}
                     user={user}
+                    existingMembers={members}
                     onClose={() => setShowInvite(false)}
                 />
             )}

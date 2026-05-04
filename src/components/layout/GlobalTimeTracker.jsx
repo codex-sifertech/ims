@@ -56,9 +56,14 @@ export default function GlobalTimeTracker({ isCheckedIn, sessionStart, onToggle 
     const handleClick = async () => {
         if (isToggling) return;
         setIsToggling(true);
+        // Safety timeout: auto-reset after 8s in case something hangs
+        const safetyTimer = setTimeout(() => setIsToggling(false), 8000);
         try {
             await onToggle();
+        } catch (err) {
+            console.error('[TimeTracker] Toggle failed:', err);
         } finally {
+            clearTimeout(safetyTimer);
             setIsToggling(false);
         }
     };
