@@ -37,7 +37,7 @@ const useStore = create((set) => ({
         localStorage.setItem('ims_sidebar_collapsed', collapsed);
         set({ isSidebarCollapsed: collapsed });
     },
-    setUser: (user) => set({ user, isLoading: false }),
+    setUser: (user) => set({ user }),
     setLoading: (isLoading) => set({ isLoading }),
     setActiveCompany: (company) => {
         if (company) {

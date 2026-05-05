@@ -164,15 +164,29 @@ export function useGlobalTasks() {
     const addTaskToCompany = async (taskData) => {
         if (!activeCompany?.id) return;
         try {
+            const { pendingSubtasks, ...rest } = taskData;
             const tasksRef = collection(db, 'companies', activeCompany.id, 'tasks');
-            await addDoc(tasksRef, {
-                ...taskData,
+            const docRef = await addDoc(tasksRef, {
+                ...rest,
                 type: 'company',
                 createdBy: user.uid,
                 createdAt: new Date().toISOString(),
-                subTasks: taskData.subTasks || [],
-                attachments: taskData.attachments || []
+                subTasks: rest.subTasks || [],
+                attachments: rest.attachments || []
             });
+            // Save pending subtasks from TaskDetailPanel to the subcollection
+            if (pendingSubtasks?.length > 0) {
+                const subtasksCol = collection(docRef, 'subtasks');
+                for (const st of pendingSubtasks) {
+                    await addDoc(subtasksCol, {
+                        title: st.title,
+                        done: st.done || false,
+                        createdBy: user.uid,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    });
+                }
+            }
         } catch (error) {
             console.error("Error adding company task:", error);
             throw error; // Re-throw so the UI can catch it

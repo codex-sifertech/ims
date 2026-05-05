@@ -162,8 +162,25 @@ function App() {
 
             setCompanies(fetchedCompanies);
 
-            // Per user request: Always force Workspace Selection on fresh load
-            setActiveCompany(null);
+            // Restore last active company from localStorage so links and refreshes
+            // don't kick the user back to workspace selection every time.
+            // Falls back to selection screen if the saved company is no longer accessible.
+            try {
+                const saved = localStorage.getItem('activeCompany');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    const found = fetchedCompanies.find(c => c.id === parsed?.id);
+                    if (found) {
+                        setActiveCompany(found);
+                    } else {
+                        setActiveCompany(null); // Company no longer accessible
+                    }
+                } else {
+                    setActiveCompany(null); // No saved company — show selection
+                }
+            } catch {
+                setActiveCompany(null);
+            }
         } catch (error) {
             console.error("FATAL APPLOADS ERROR:", error);
             // Fallback gracefully so UI doesn't indefinitely hang

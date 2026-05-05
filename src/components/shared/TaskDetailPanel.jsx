@@ -7,13 +7,14 @@ import {
   Copy, Sparkles, Search, Bell, Filter, Mic, FileUp,
   Activity, ArrowRight, MessageSquare, Check, ExternalLink,
   CheckCircle2, Circle, MoreVertical, ClipboardCopy, Loader2,
-  FileText, StickyNote, Globe, BookOpen
+  FileText, StickyNote, Globe, BookOpen, UploadCloud
 } from 'lucide-react';
 import {
   doc, collection, addDoc, updateDoc, deleteDoc, onSnapshot,
   serverTimestamp, query, orderBy, arrayUnion, arrayRemove, getDoc
 } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../firebase';
 import useStore from '../../store/useStore';
 import { format, isPast } from 'date-fns';
 import { sendNotification } from '../../utils/notifications';
@@ -217,6 +218,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
 
   // ── Subtasks ─────────────────────────────────────────
   const [subtasks, setSubtasks] = useState([]);
+  const [localSubtasks, setLocalSubtasks] = useState([]); // For new tasks before saving
   const [showSubtasks, setShowSubtasks] = useState(true);
   const [newSubtask, setNewSubtask] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
@@ -227,6 +229,8 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
   const [attachUrl, setAttachUrl] = useState('');
   const [attachName, setAttachName] = useState('');
   const [addingAttachment, setAddingAttachment] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef(null);
 
   // ── Notes auto-save ────────────────────────────────────
   const [savingNotes, setSavingNotes] = useState(false);
@@ -296,6 +300,13 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
   // ── Subtask actions ────────────────────────────────────
   const handleAddSubtask = async () => {
     if (!newSubtask.trim()) return;
+    if (isNewTask) {
+      // Store locally for new tasks
+      setLocalSubtasks(prev => [...prev, { id: `local-${Date.now()}`, title: newSubtask.trim(), done: false }]);
+      setNewSubtask('');
+      subtaskInputRef.current?.focus();
+      return;
+    }
     if (!taskPath) { setToast('Save the task first to add subtasks'); return; }
     setAddingSubtask(true);
     try {
@@ -313,17 +324,22 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
   };
 
   const handleDeleteSubtask = async (subtaskId) => {
+    if (isNewTask) {
+      setLocalSubtasks(prev => prev.filter(s => s.id !== subtaskId));
+      return;
+    }
     if (!taskPath) return;
     await deleteDoc(doc(db, taskPath, 'subtasks', subtaskId));
   };
 
-  const doneCount = subtasks.filter(s => s.done).length;
-  const subtaskProgress = subtasks.length > 0 ? Math.round((doneCount / subtasks.length) * 100) : 0;
+  const displaySubtasks = isNewTask ? localSubtasks : subtasks;
+  const doneCount = displaySubtasks.filter(s => s.done).length;
+  const subtaskProgress = displaySubtasks.length > 0 ? Math.round((doneCount / displaySubtasks.length) * 100) : 0;
 
   // ── Attachment actions ─────────────────────────────────
   const handleAddAttachment = async () => {
     if (!attachUrl.trim()) return;
-    if (!taskPath) { setToast('Save the task first to add attachments'); return; }
+    if (!taskPath && !isNewTask) { setToast('Save the task first to add attachments'); return; }
     setAddingAttachment(true);
     try {
       const newAtt = {
@@ -334,12 +350,46 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
         addedAt: new Date().toISOString(),
       };
       const updated = [...attachments, newAtt];
-      await updateDoc(doc(db, taskPath), { attachments: updated, updatedAt: new Date().toISOString() });
+      if (!isNewTask && taskPath) {
+        await updateDoc(doc(db, taskPath), { attachments: updated, updatedAt: new Date().toISOString() });
+      }
       setAttachments(updated);
       setAttachUrl('');
       setAttachName('');
     } catch (e) { console.error(e); }
     setAddingAttachment(false);
+  };
+
+  // ── File upload ─────────────────────────────────────────
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!taskPath && !isNewTask) { setToast('Save the task first'); return; }
+    setUploadingFile(true);
+    try {
+      const filePath = `tasks/${task?.id || 'draft'}/${Date.now()}_${file.name}`;
+      const fileRef = storageRef(storage, filePath);
+      await uploadBytes(fileRef, file);
+      const downloadURL = await getDownloadURL(fileRef);
+      const newAtt = {
+        id: Date.now().toString(),
+        url: downloadURL,
+        name: file.name,
+        addedBy: user.uid,
+        addedAt: new Date().toISOString(),
+      };
+      const updated = [...attachments, newAtt];
+      if (!isNewTask && taskPath) {
+        await updateDoc(doc(db, taskPath), { attachments: updated, updatedAt: new Date().toISOString() });
+      }
+      setAttachments(updated);
+      setToast('File uploaded!');
+    } catch (err) {
+      console.error('Upload failed:', err);
+      setToast('Upload failed');
+    }
+    setUploadingFile(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDeleteAttachment = async (attId) => {
@@ -375,7 +425,12 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
   const handleCreate = () => {
     if (!title.trim()) { alert('Task title is required.'); return; }
     if (onCreate) {
-      const newTaskData = { title: title.trim(), status, priority, description, notes, assignedTo: assignees, startDate, dueDate };
+      const newTaskData = {
+        title: title.trim(), status, priority, description, notes,
+        assignedTo: assignees, startDate, dueDate,
+        pendingSubtasks: localSubtasks.map(s => ({ title: s.title, done: s.done })),
+        attachments,
+      };
       onCreate(newTaskData);
       if (dueDate) syncTaskToGoogleCalendar(user.uid, newTaskData);
       onClose();
@@ -726,7 +781,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
                     <div className="flex flex-col">
                       <span className="text-sm font-bold text-slate-200 group-hover:text-white">Subtasks</span>
                       <span className="text-[10px] font-medium text-slate-500">
-                        {subtasks.length > 0 ? `${doneCount}/${subtasks.length} done` : 'Break it down'}
+                        {displaySubtasks.length > 0 ? `${doneCount}/${displaySubtasks.length} done` : 'Break it down'}
                       </span>
                     </div>
                   </motion.button>
@@ -776,9 +831,9 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
                         <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase tracking-wider">
                           <CheckSquare size={16} className="text-blue-400" />
                           Subtasks
-                          {subtasks.length > 0 && (
+                          {displaySubtasks.length > 0 && (
                             <span className="text-xs font-medium text-slate-500 normal-case tracking-normal">
-                              {doneCount}/{subtasks.length}
+                              {doneCount}/{displaySubtasks.length}
                             </span>
                           )}
                         </h3>
@@ -787,16 +842,16 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
                         </button>
                       </div>
 
-                      {subtasks.length > 0 && (
+                      {displaySubtasks.length > 0 && (
                         <div className="w-full h-1.5 bg-dark-700 rounded-full overflow-hidden">
                           <motion.div animate={{ width: `${subtaskProgress}%` }} className="h-full bg-emerald-500 rounded-full transition-all" />
                         </div>
                       )}
 
                       <div className="space-y-0.5 bg-white/[0.01] rounded-xl border border-white/5 p-3">
-                        {subtasks.length === 0 ? (
+                        {displaySubtasks.length === 0 ? (
                           <p className="text-xs text-slate-600 text-center py-2">No subtasks yet. Add one below.</p>
-                        ) : subtasks.map(st => (
+                        ) : displaySubtasks.map(st => (
                           <SubtaskRow key={st.id} subtask={st} taskPath={taskPath} onDelete={handleDeleteSubtask} />
                         ))}
                       </div>
@@ -807,13 +862,13 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
                           value={newSubtask}
                           onChange={e => setNewSubtask(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(); }}
-                          placeholder={isNewTask ? 'Save task first to add subtasks…' : 'Add a subtask… (press Enter)'}
-                          disabled={isNewTask}
+                          placeholder={'Add a subtask… (press Enter)'}
+                          disabled={false}
                           className="flex-1 bg-dark-800/50 border border-white/5 focus:border-primary-500/50 rounded-xl px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 transition-all disabled:opacity-40"
                         />
                         <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                           onClick={handleAddSubtask}
-                          disabled={!newSubtask.trim() || addingSubtask || isNewTask}
+                          disabled={!newSubtask.trim() || addingSubtask}
                           className="px-4 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5">
                           {addingSubtask ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Add
                         </motion.button>
@@ -846,6 +901,31 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
                   )}
 
                   <div className="p-3 bg-white/[0.02] rounded-xl border border-white/5 space-y-2">
+                    {/* File upload button */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      id="task-file-upload-panel"
+                    />
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingFile}
+                      className="w-full flex items-center justify-center gap-2.5 py-3 bg-dark-800/50 hover:bg-dark-700/50 border border-dashed border-white/10 hover:border-pink-500/30 rounded-xl text-sm font-bold text-slate-400 hover:text-pink-300 transition-all cursor-pointer">
+                      {uploadingFile ? (
+                        <><Loader2 size={16} className="animate-spin text-pink-400" /> Uploading…</>
+                      ) : (
+                        <><UploadCloud size={16} /> Upload File</>
+                      )}
+                    </motion.button>
+
+                    <div className="flex items-center gap-2 my-2">
+                      <div className="flex-1 h-px bg-white/5" />
+                      <span className="text-[9px] text-slate-600 font-bold uppercase tracking-widest">or paste a link</span>
+                      <div className="flex-1 h-px bg-white/5" />
+                    </div>
+
                     <input
                       id="attach-url-input"
                       value={attachUrl}
