@@ -1,323 +1,310 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X, ChevronDown, Plus, Paperclip, Smile, Send,
-  Clock, Flag, AlignLeft, CheckSquare, Link2,
-  Calendar, Users, Trash2, ArrowLeft, MoreHorizontal,
-  Copy, Sparkles, Search, ExternalLink,
-  CheckCircle2, Loader2, Tag, Timer, Activity,
-  MessageSquare, Check, ClipboardCopy, Zap,
-  RotateCcw, ArrowRight, Circle
+  X, ChevronDown, Plus, Paperclip, Smile, Send, Download,
+  Clock, Flag, Tag, AlignLeft, CheckSquare, Link2, List,
+  Calendar, Users, User, Trash2, ArrowLeft, Share, MoreHorizontal,
+  Copy, Sparkles, Search, Bell, Filter, Mic, FileUp,
+  Activity, ArrowRight, MessageSquare, Check, ExternalLink,
+  CheckCircle2, Circle, MoreVertical, ClipboardCopy, Loader2,
+  FileText, StickyNote, Globe, BookOpen
 } from 'lucide-react';
 import {
   doc, collection, addDoc, updateDoc, deleteDoc, onSnapshot,
-  serverTimestamp, query, orderBy, getDoc
+  serverTimestamp, query, orderBy, arrayUnion, arrayRemove, getDoc
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import useStore from '../../store/useStore';
-import { format, isPast, formatDistanceToNow } from 'date-fns';
+import { format, isPast } from 'date-fns';
 import { sendNotification } from '../../utils/notifications';
 import { syncTaskToGoogleCalendar } from '../../utils/calendarSync';
 
-// ── Constants ─────────────────────────────────────────────────────────────
-
 const PRIORITIES = [
-  { label: 'Low',    color: 'bg-emerald-500/15', dot: 'bg-emerald-400', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  { label: 'Medium', color: 'bg-blue-500/15',    dot: 'bg-blue-400',    text: 'text-blue-300',    border: 'border-blue-500/30'    },
-  { label: 'High',   color: 'bg-amber-500/15',   dot: 'bg-amber-400',   text: 'text-amber-300',   border: 'border-amber-500/30'   },
-  { label: 'Urgent', color: 'bg-red-500/15',     dot: 'bg-red-400',     text: 'text-red-300',     border: 'border-red-500/30'     },
+  { label: 'Low',    color: 'bg-emerald-500/20', dot: 'bg-emerald-400', text: 'text-emerald-300', border: 'border-emerald-500/30', hover: 'hover:border-emerald-500/50' },
+  { label: 'Medium', color: 'bg-blue-500/20',    dot: 'bg-blue-400',    text: 'text-blue-300',    border: 'border-blue-500/30',    hover: 'hover:border-blue-500/50' },
+  { label: 'High',   color: 'bg-amber-500/20',   dot: 'bg-amber-400',   text: 'text-amber-300',   border: 'border-amber-500/30',   hover: 'hover:border-amber-500/50' },
+  { label: 'Urgent', color: 'bg-red-500/20',     dot: 'bg-red-400',     text: 'text-red-300',     border: 'border-red-500/30',     hover: 'hover:border-red-500/50' },
 ];
 
 const STATUSES = [
-  { id: 'todo',        label: 'To Do',       icon: <Circle size={12} className="text-slate-500" />,       ring: 'border-slate-500'   },
-  { id: 'in-progress', label: 'In Progress', icon: <RotateCcw size={12} className="text-amber-400" />,    ring: 'border-amber-400'   },
-  { id: 'review',      label: 'In Review',   icon: <ArrowRight size={12} className="text-blue-400" />,    ring: 'border-blue-400'    },
-  { id: 'done',        label: 'Done',        icon: <CheckCircle2 size={12} className="text-emerald-400" />, ring: 'border-emerald-400' },
+  { id: 'todo',        label: 'To Do',       icon: '⚪' },
+  { id: 'in-progress', label: 'In Progress', icon: '🟡' },
+  { id: 'review',      label: 'In Review',   icon: '🔵' },
+  { id: 'done',        label: 'Done',        icon: '🟢' },
 ];
 
-const TAG_OPTIONS = [
-  { label: 'Bug',      bg: 'bg-red-500/20',     text: 'text-red-300',     border: 'border-red-500/30'     },
-  { label: 'Feature',  bg: 'bg-blue-500/20',    text: 'text-blue-300',    border: 'border-blue-500/30'    },
-  { label: 'Design',   bg: 'bg-purple-500/20',  text: 'text-purple-300',  border: 'border-purple-500/30'  },
-  { label: 'Sprint',   bg: 'bg-amber-500/20',   text: 'text-amber-300',   border: 'border-amber-500/30'   },
-  { label: 'Review',   bg: 'bg-cyan-500/20',    text: 'text-cyan-300',    border: 'border-cyan-500/30'    },
-  { label: 'Docs',     bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  { label: 'Testing',  bg: 'bg-indigo-500/20',  text: 'text-indigo-300',  border: 'border-indigo-500/30'  },
-  { label: 'Backend',  bg: 'bg-rose-500/20',    text: 'text-rose-300',    border: 'border-rose-500/30'    },
-];
+const EMOJI_SET = ['👍','❤️','😂','🎉','👀','🔥','✅','🚀'];
 
-const tagCfg = (label) => TAG_OPTIONS.find(t => t.label === label) || TAG_OPTIONS[0];
+// ── Link type detector ─────────────────────────────────────────────────────
 
-const EMOJI_SET = ['👍', '❤️', '😂', '🎉', '👀', '🔥', '✅', '🚀'];
+function detectLinkType(url = '') {
+  const u = url.toLowerCase();
+  if (u.includes('figma.com'))             return { label: 'Figma',         emoji: '🎨', color: 'bg-purple-500/10 border-purple-500/20 text-purple-300' };
+  if (u.includes('notion.so'))             return { label: 'Notion',        emoji: '📝', color: 'bg-white/5 border-white/10 text-slate-300' };
+  if (u.includes('github.com'))            return { label: 'GitHub',        emoji: '💻', color: 'bg-slate-500/10 border-slate-500/20 text-slate-300' };
+  if (u.includes('docs.google.com'))       return { label: 'Google Docs',   emoji: '📄', color: 'bg-blue-500/10 border-blue-500/20 text-blue-300' };
+  if (u.includes('sheets.google.com'))     return { label: 'Google Sheets', emoji: '📊', color: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' };
+  if (u.includes('drive.google.com'))      return { label: 'Google Drive',  emoji: '☁️', color: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300' };
+  if (u.includes('loom.com'))              return { label: 'Loom',          emoji: '🎥', color: 'bg-pink-500/10 border-pink-500/20 text-pink-300' };
+  if (u.includes('linear.app'))            return { label: 'Linear',        emoji: '⚡', color: 'bg-violet-500/10 border-violet-500/20 text-violet-300' };
+  if (u.includes('atlassian.net') || u.includes('jira.com')) return { label: 'Jira', emoji: '🔷', color: 'bg-blue-500/10 border-blue-500/20 text-blue-300' };
+  if (u.includes('miro.com'))              return { label: 'Miro',          emoji: '🖼️', color: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300' };
+  if (u.includes('slack.com'))             return { label: 'Slack',         emoji: '💬', color: 'bg-amber-500/10 border-amber-500/20 text-amber-300' };
+  if (u.includes('meet.google.com'))       return { label: 'Google Meet',   emoji: '📹', color: 'bg-green-500/10 border-green-500/20 text-green-300' };
+  if (u.includes('calendar.google.com'))   return { label: 'Calendar',      emoji: '📅', color: 'bg-green-500/10 border-green-500/20 text-green-300' };
+  return { label: 'Link', emoji: '🔗', color: 'bg-white/[0.03] border-white/5 text-slate-400' };
+}
 
-// ── Tiny helpers ──────────────────────────────────────────────────────────
+// ── Small reusable components ──────────────────────────────────────────────
 
-function Avatar({ name, photoURL, size = 6 }) {
-  const colors = ['bg-violet-600','bg-blue-600','bg-emerald-600','bg-amber-600','bg-pink-600','bg-cyan-600'];
-  const idx = name ? name.charCodeAt(0) % colors.length : 0;
-  if (photoURL) return <img src={photoURL} alt={name} className={`w-${size} h-${size} rounded-full object-cover shrink-0`} />;
+function MemberChip({ member, onRemove }) {
   return (
-    <div className={`w-${size} h-${size} rounded-full ${colors[idx]} flex items-center justify-center text-white font-black text-[10px] shrink-0`}>
-      {(name || '?').charAt(0).toUpperCase()}
+    <motion.span
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      className="flex items-center gap-1.5 px-2 py-1 bg-dark-700/50 border border-white/5 hover:border-white/10 rounded-full text-xs text-white font-medium transition-all"
+    >
+      {member.photoURL ? (
+        <img src={member.photoURL} alt={member.name} className="w-5 h-5 rounded-full object-cover" />
+      ) : (
+        <span className="w-5 h-5 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-[9px] font-black uppercase shrink-0">
+          {member.name?.charAt(0) || '?'}
+        </span>
+      )}
+      <span className="pr-1">{member.name}</span>
+      {onRemove && (
+        <button onClick={() => onRemove(member.id)} className="text-slate-400 hover:text-red-400 transition-colors ml-0.5">
+          <X size={12} />
+        </button>
+      )}
+    </motion.span>
+  );
+}
+
+function EmojiReactions({ reactions = {}, messageId, taskPath }) {
+  const { user } = useStore();
+  const toggleReaction = async (emoji) => {
+    if (!taskPath) return;
+    const msgRef = doc(db, taskPath, 'comments', messageId);
+    const current = reactions[emoji] || [];
+    const updated = current.includes(user.uid)
+      ? current.filter(id => id !== user.uid)
+      : [...current, user.uid];
+    await updateDoc(msgRef, { [`reactions.${emoji}`]: updated });
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {Object.entries(reactions).filter(([, uids]) => uids.length > 0).map(([emoji, uids]) => (
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} key={emoji}
+          onClick={() => toggleReaction(emoji)}
+          className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all ${
+            uids.includes(user?.uid)
+              ? 'bg-primary-500/20 border-primary-500/40 text-primary-300'
+              : 'bg-dark-800/80 border-white/5 text-slate-300 hover:border-white/20'
+          }`}
+        >
+          <span>{emoji}</span>
+          <span className="font-semibold">{uids.length}</span>
+        </motion.button>
+      ))}
     </div>
   );
 }
 
-function SaveBadge({ state }) {
-  return (
-    <AnimatePresence>
-      {state !== 'idle' && (
-        <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className={`text-[10px] font-semibold ${state === 'saving' ? 'text-slate-500' : 'text-emerald-500'} flex items-center gap-1`}>
-          {state === 'saving'
-            ? <><Loader2 size={10} className="animate-spin" /> Saving…</>
-            : <><Check size={10} /> Saved</>}
-        </motion.span>
-      )}
-    </AnimatePresence>
-  );
-}
-
-function Toast({ msg, onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); }, [onDone]);
-  return (
-    <motion.div initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 12 }}
-      className="fixed bottom-6 right-6 z-[400] bg-dark-800 border border-white/10 shadow-2xl rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm text-white font-semibold">
-      <CheckCircle2 size={15} className="text-emerald-400 shrink-0" /> {msg}
-    </motion.div>
-  );
-}
-
-// ── Inline property chip ──────────────────────────────────────────────────
-
-function PropChip({ icon, label, onClick, className = '' }) {
-  return (
-    <button onClick={onClick}
-      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/5 border border-transparent hover:border-white/8 ${className}`}>
-      {icon}{label}
-    </button>
-  );
-}
-
-// ── Subtask row ───────────────────────────────────────────────────────────
+// ── Subtask row ────────────────────────────────────────────────────────────
 
 function SubtaskRow({ subtask, taskPath, onDelete }) {
-  const [editing, setEditing] = useState(false);
-  const [editVal, setEditVal] = useState(subtask.title);
-
-  const toggle = () => updateDoc(doc(db, taskPath, 'subtasks', subtask.id), {
-    done: !subtask.done, updatedAt: serverTimestamp()
-  });
-
-  const saveEdit = async () => {
-    if (editVal.trim() && editVal !== subtask.title) {
-      await updateDoc(doc(db, taskPath, 'subtasks', subtask.id), { title: editVal.trim(), updatedAt: serverTimestamp() });
-    }
-    setEditing(false);
+  const toggle = async () => {
+    if (!taskPath) return;
+    await updateDoc(doc(db, taskPath, 'subtasks', subtask.id), {
+      done: !subtask.done,
+      updatedAt: serverTimestamp(),
+    });
   };
 
   return (
-    <div className="flex items-center gap-2.5 group py-1 px-1 rounded-lg hover:bg-white/[0.02] transition-colors">
+    <div className="flex items-center gap-2.5 group py-1.5">
       <button onClick={toggle}
-        className={`shrink-0 w-[18px] h-[18px] rounded-[5px] border-2 flex items-center justify-center transition-all ${
-          subtask.done ? 'bg-emerald-500 border-emerald-500' : 'border-white/20 hover:border-primary-400'
+        className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-all ${
+          subtask.done
+            ? 'bg-emerald-500 border-emerald-500 text-white'
+            : 'border-white/20 hover:border-primary-400 bg-transparent'
         }`}>
-        {subtask.done && <Check size={11} className="text-white" strokeWidth={3} />}
+        {subtask.done && <Check size={10} />}
       </button>
+      <span className={`flex-1 text-sm transition-colors ${subtask.done ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+        {subtask.title}
+      </span>
+      <button onClick={() => onDelete(subtask.id)}
+        className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all">
+        <Trash2 size={12} />
+      </button>
+    </div>
+  );
+}
 
-      {editing ? (
-        <input autoFocus value={editVal}
-          onChange={e => setEditVal(e.target.value)}
-          onBlur={saveEdit}
-          onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') { setEditVal(subtask.title); setEditing(false); } }}
-          className="flex-1 bg-transparent text-sm text-white outline-none border-b border-primary-500/50" />
-      ) : (
-        <span
-          onDoubleClick={() => setEditing(true)}
-          className={`flex-1 text-sm cursor-default select-none transition-all ${
-            subtask.done ? 'line-through text-slate-600' : 'text-slate-200'
-          }`}>
-          {subtask.title}
-        </span>
-      )}
+// ── Attachment card ────────────────────────────────────────────────────────
 
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={() => setEditing(true)} className="p-1 text-slate-600 hover:text-slate-300 transition-colors rounded">
-          <Sparkles size={11} />
-        </button>
-        <button onClick={() => onDelete(subtask.id)} className="p-1 text-slate-600 hover:text-red-400 transition-colors rounded">
-          <Trash2 size={11} />
+function AttachmentCard({ att, onDelete }) {
+  const type = detectLinkType(att.url);
+  return (
+    <div className={`flex items-center gap-3 p-3 border rounded-xl group hover:border-white/20 transition-all ${type.color}`}>
+      <span className="text-xl shrink-0">{type.emoji}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-bold text-slate-100 truncate">{att.name || att.url}</p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[9px] font-bold uppercase tracking-widest opacity-60">{type.label}</span>
+          <span className="text-[9px] text-slate-600">·</span>
+          <p className="text-[9px] text-slate-500 truncate max-w-[180px]">{att.url}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <a href={att.url} target="_blank" rel="noreferrer"
+          className="p-1.5 text-slate-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-all">
+          <ExternalLink size={12} />
+        </a>
+        <button onClick={() => onDelete(att.id)}
+          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all">
+          <Trash2 size={12} />
         </button>
       </div>
     </div>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────
+// ── Toast ──────────────────────────────────────────────────────────────────
+
+function Toast({ msg, onDone }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 2000);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+      className="fixed bottom-6 right-6 z-[300] bg-dark-800 border border-white/10 shadow-2xl rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm text-white font-semibold">
+      <CheckCircle2 size={16} className="text-emerald-400" /> {msg}
+    </motion.div>
+  );
+}
+
+// ── Main panel ─────────────────────────────────────────────────────────────
 
 export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onDelete, members = [] }) {
   const { user } = useStore();
   const isNewTask = !task?.id;
   const taskPath = task?._path;
 
-  // ── Editable fields ───────────────────────────────────
-  const [title, setTitle]       = useState(task?.title || '');
-  const [status, setStatus]     = useState(task?.status || 'todo');
+  // ── Editable fields ──────────────────────────────────
+  const [title, setTitle] = useState(task?.title || '');
+  const [status, setStatus] = useState(task?.status || 'todo');
   const [priority, setPriority] = useState(task?.priority || 'Medium');
-  const [startDate, setStartDate] = useState(task?.startDate || '');
-  const [dueDate, setDueDate]   = useState(task?.dueDate || '');
+  const [startDate, setStartDate] = useState(task?.startDate || (isNewTask ? new Date().toISOString().split('T')[0] : ''));
+  const [dueDate, setDueDate] = useState(task?.dueDate || '');
   const [description, setDescription] = useState(task?.description || '');
-  const [tags, setTags]         = useState(task?.tags || []);
-  const [timeEst, setTimeEst]   = useState(task?.timeEstimate || '');
+  const [notes, setNotes] = useState(task?.notes || '');
   const [assignees, setAssignees] = useState(
-    task?.assignedTo || (isNewTask && user
-      ? [{ id: user.uid, name: user.name, photoURL: user.photoURL, email: user.email }]
-      : [])
+    task?.assignedTo || (isNewTask && user ? [{ id: user.uid, name: user.name, photoURL: user.photoURL, email: user.email }] : [])
   );
+
+  // ── UI state ─────────────────────────────────────────
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+  const [showAssigneeSearch, setShowAssigneeSearch] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [toast, setToast] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   // ── Subtasks ─────────────────────────────────────────
   const [subtasks, setSubtasks] = useState([]);
+  const [showSubtasks, setShowSubtasks] = useState(true);
   const [newSubtask, setNewSubtask] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
   const subtaskInputRef = useRef(null);
 
   // ── Attachments ───────────────────────────────────────
   const [attachments, setAttachments] = useState(task?.attachments || []);
-  const [attachUrl, setAttachUrl]   = useState('');
+  const [attachUrl, setAttachUrl] = useState('');
   const [attachName, setAttachName] = useState('');
-  const [showAttachForm, setShowAttachForm] = useState(false);
+  const [addingAttachment, setAddingAttachment] = useState(false);
 
-  // ── Comments + Activity ───────────────────────────────
-  const [comments, setComments]     = useState([]);
-  const [activityLog, setActivityLog] = useState([]);
-  const [rightTab, setRightTab]     = useState('comments'); // 'comments' | 'activity'
+  // ── Notes auto-save ────────────────────────────────────
+  const [savingNotes, setSavingNotes] = useState(false);
+  const notesTimer = useRef(null);
+
+  // ── Comments ─────────────────────────────────────────
+  const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
-  const [sending, setSending]       = useState(false);
+  const [sending, setSending] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [mentionSearch, setMentionSearch]   = useState('');
-  const [showMentions, setShowMentions]     = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [showMentions, setShowMentions] = useState(false);
   const commentInputRef = useRef(null);
-  const feedEndRef      = useRef(null);
+  const commentsEndRef = useRef(null);
 
-  // ── UI state ──────────────────────────────────────────
-  const [saveState, setSaveState]     = useState('idle'); // 'idle' | 'saving' | 'saved'
-  const [showStatusMenu, setShowStatusMenu]   = useState(false);
-  const [showPriorityMenu, setShowPriorityMenu] = useState(false);
-  const [showTagMenu, setShowTagMenu]     = useState(false);
-  const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
-  const [assigneeSearch, setAssigneeSearch]   = useState('');
-  const [showMoreMenu, setShowMoreMenu]     = useState(false);
-  const [confirmDelete, setConfirmDelete]   = useState(false);
-  const [deleting, setDeleting]       = useState(false);
-  const [toast, setToast]             = useState('');
-  const saveTimer = useRef(null);
-
-  // ── Firestore subscriptions ───────────────────────────
+  // ── Subscribe to subtasks ─────────────────────────────
   useEffect(() => {
     if (!taskPath) return;
-    const unsub1 = onSnapshot(
-      query(collection(db, taskPath, 'subtasks'), orderBy('createdAt', 'asc')),
-      snap => setSubtasks(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    const unsub2 = onSnapshot(
-      query(collection(db, taskPath, 'comments'), orderBy('createdAt', 'asc')),
-      snap => setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    const unsub3 = onSnapshot(
-      query(collection(db, taskPath, 'activity'), orderBy('at', 'desc')),
-      snap => setActivityLog(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    return () => { unsub1(); unsub2(); unsub3(); };
+    const q = query(collection(db, taskPath, 'subtasks'), orderBy('createdAt', 'asc'));
+    return onSnapshot(q, snap => {
+      setSubtasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
   }, [taskPath]);
 
-  useEffect(() => { feedEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [comments]);
+  // ── Subscribe to comments ─────────────────────────────
+  useEffect(() => {
+    if (!taskPath) return;
+    const q = query(collection(db, taskPath, 'comments'), orderBy('createdAt', 'asc'));
+    return onSnapshot(q, snap => setComments(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, [taskPath]);
+
+  useEffect(() => { commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [comments]);
+
+  // Keep local attachments in sync when task prop changes
   useEffect(() => { setAttachments(task?.attachments || []); }, [task?.attachments]);
 
-  // ── Auto-save with debounce + activity log ────────────
-  const logActivity = useCallback(async (type, extra = {}) => {
-    if (!taskPath || isNewTask) return;
-    try {
-      await addDoc(collection(db, taskPath, 'activity'), {
-        type, by: user.uid, byName: user.name || user.email,
-        at: serverTimestamp(), ...extra
-      });
-    } catch {}
-  }, [taskPath, isNewTask, user]);
-
-  const saveField = useCallback(async (field, value, logPayload) => {
+  // ── Auto-save helpers ──────────────────────────────────
+  const saveField = async (field, value) => {
     if (isNewTask) { onUpdate?.({ [field]: value }); return; }
     if (!taskPath) return;
-    clearTimeout(saveTimer.current);
-    setSaveState('saving');
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await updateDoc(doc(db, taskPath), { [field]: value, updatedAt: new Date().toISOString() });
-        if (logPayload) await logActivity(logPayload.type, logPayload);
-        if (field === 'status' && value === 'done') {
-          (Array.isArray(task.assignedTo) ? task.assignedTo : []).forEach(m =>
-            sendNotification(m.id, user, 'completed', `completed task "${task.title}"`, task.id)
-          );
-        }
-        const updated = { ...task, [field]: value };
-        if (updated.dueDate && ['title', 'description', 'dueDate', 'assignedTo'].includes(field)) {
-          syncTaskToGoogleCalendar(user.uid, updated).catch(() => {});
-        }
-        onUpdate?.({ [field]: value });
-        setSaveState('saved');
-        setTimeout(() => setSaveState('idle'), 1800);
-      } catch (e) {
-        console.error('Save failed:', e);
-        setSaveState('idle');
+    try {
+      await updateDoc(doc(db, taskPath), { [field]: value, updatedAt: new Date().toISOString() });
+      if (field === 'status' && value === 'done') {
+        (Array.isArray(task.assignedTo) ? task.assignedTo : []).forEach(m =>
+          sendNotification(m.id, user, 'completed', `completed task "${task.title}"`, task.id)
+        );
       }
-    }, 600);
-  }, [isNewTask, taskPath, task, user, logActivity, onUpdate]);
-
-  // ── Status & Priority ─────────────────────────────────
-  const handleStatusChange = (newStatus) => {
-    const prev = status;
-    setStatus(newStatus);
-    setShowStatusMenu(false);
-    saveField('status', newStatus, { type: 'status_changed', from: prev, to: newStatus });
+      const updated = { ...task, [field]: value };
+      if (!isNewTask && updated.dueDate && ['title', 'description', 'dueDate', 'assignedTo'].includes(field)) {
+        syncTaskToGoogleCalendar(user.uid, updated);
+      }
+      onUpdate?.({ [field]: value });
+    } catch (e) { console.error('Save failed:', e); }
   };
 
-  const handlePriorityChange = (newPriority) => {
-    const prev = priority;
-    setPriority(newPriority);
-    setShowPriorityMenu(false);
-    saveField('priority', newPriority, { type: 'priority_changed', from: prev, to: newPriority });
+  // ── Notes auto-save (debounced 800ms) ─────────────────
+  const handleNotesChange = (val) => {
+    setNotes(val);
+    if (notesTimer.current) clearTimeout(notesTimer.current);
+    notesTimer.current = setTimeout(async () => {
+      setSavingNotes(true);
+      await saveField('notes', val);
+      setSavingNotes(false);
+    }, 800);
   };
 
-  // ── Tags ──────────────────────────────────────────────
-  const toggleTag = (tagLabel) => {
-    const has = tags.includes(tagLabel);
-    const updated = has ? tags.filter(t => t !== tagLabel) : [...tags, tagLabel];
-    setTags(updated);
-    saveField('tags', updated, { type: has ? 'tag_removed' : 'tag_added', tag: tagLabel });
-  };
-
-  // ── Assignees ─────────────────────────────────────────
-  const toggleAssignee = (member) => {
-    const existing = assignees.find(a => a.id === member.id);
-    const updated = existing
-      ? assignees.filter(a => a.id !== member.id)
-      : [...assignees, { id: member.id, name: member.name, photoURL: member.photoURL, email: member.email }];
-    setAssignees(updated);
-    saveField('assignedTo', updated, {
-      type: existing ? 'unassigned' : 'assigned',
-      memberName: member.name
-    });
-    if (!existing) sendNotification(member.id, user, 'assignment', `assigned you to "${task?.title || 'a task'}"`, task?.id);
-  };
-
-  // ── Subtasks ──────────────────────────────────────────
+  // ── Subtask actions ────────────────────────────────────
   const handleAddSubtask = async () => {
-    if (!newSubtask.trim() || !taskPath) return;
+    if (!newSubtask.trim()) return;
+    if (!taskPath) { setToast('Save the task first to add subtasks'); return; }
     setAddingSubtask(true);
     try {
       await addDoc(collection(db, taskPath, 'subtasks'), {
-        title: newSubtask.trim(), done: false,
-        createdBy: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        title: newSubtask.trim(),
+        done: false,
+        createdBy: user.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
       setNewSubtask('');
       subtaskInputRef.current?.focus();
@@ -325,89 +312,108 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
     setAddingSubtask(false);
   };
 
-  const handleDeleteSubtask = (id) => deleteDoc(doc(db, taskPath, 'subtasks', id));
+  const handleDeleteSubtask = async (subtaskId) => {
+    if (!taskPath) return;
+    await deleteDoc(doc(db, taskPath, 'subtasks', subtaskId));
+  };
 
   const doneCount = subtasks.filter(s => s.done).length;
-  const progress  = subtasks.length ? Math.round((doneCount / subtasks.length) * 100) : 0;
+  const subtaskProgress = subtasks.length > 0 ? Math.round((doneCount / subtasks.length) * 100) : 0;
 
-  // ── Attachments ───────────────────────────────────────
+  // ── Attachment actions ─────────────────────────────────
   const handleAddAttachment = async () => {
-    if (!attachUrl.trim() || !taskPath) return;
-    const newAtt = {
-      id: Date.now().toString(),
-      url: attachUrl.trim(),
-      name: attachName.trim() || attachUrl.trim(),
-      addedBy: user.uid, addedAt: new Date().toISOString()
-    };
-    const updated = [...attachments, newAtt];
-    await updateDoc(doc(db, taskPath), { attachments: updated, updatedAt: new Date().toISOString() });
-    setAttachments(updated);
-    setAttachUrl(''); setAttachName(''); setShowAttachForm(false);
+    if (!attachUrl.trim()) return;
+    if (!taskPath) { setToast('Save the task first to add attachments'); return; }
+    setAddingAttachment(true);
+    try {
+      const newAtt = {
+        id: Date.now().toString(),
+        url: attachUrl.trim(),
+        name: attachName.trim() || attachUrl.trim(),
+        addedBy: user.uid,
+        addedAt: new Date().toISOString(),
+      };
+      const updated = [...attachments, newAtt];
+      await updateDoc(doc(db, taskPath), { attachments: updated, updatedAt: new Date().toISOString() });
+      setAttachments(updated);
+      setAttachUrl('');
+      setAttachName('');
+    } catch (e) { console.error(e); }
+    setAddingAttachment(false);
   };
 
-  const handleDeleteAttachment = async (id) => {
-    const updated = attachments.filter(a => a.id !== id);
+  const handleDeleteAttachment = async (attId) => {
+    if (!taskPath) return;
+    const updated = attachments.filter(a => a.id !== attId);
     await updateDoc(doc(db, taskPath), { attachments: updated, updatedAt: new Date().toISOString() });
     setAttachments(updated);
   };
 
-  // ── Share ─────────────────────────────────────────────
+  // ── Share ───────────────────────────────────────────────
   const handleShare = async () => {
     const url = `${window.location.origin}${window.location.pathname}?task=${task?.id || ''}`;
-    try { await navigator.clipboard.writeText(url); } catch {}
-    setToast('Link copied!');
+    try { await navigator.clipboard.writeText(url); } catch { }
+    setToast('Link copied to clipboard!');
   };
 
-  // ── Delete ────────────────────────────────────────────
+  // ── Delete task ─────────────────────────────────────────
   const handleDeleteTask = async () => {
     if (!taskPath) return;
+    if (!window.confirm('Delete this task? This cannot be undone.')) return;
     setDeleting(true);
     try {
       await deleteDoc(doc(db, taskPath));
       onDelete?.();
       onClose();
-    } catch (e) { console.error(e); setDeleting(false); }
+    } catch (e) {
+      console.error('Delete failed:', e);
+      setDeleting(false);
+    }
   };
 
-  // ── Create ────────────────────────────────────────────
+  // ── Create new task ─────────────────────────────────────
   const handleCreate = () => {
-    if (!title.trim()) return;
-    const newTaskData = { title: title.trim(), status, priority, description, assignedTo: assignees, startDate, dueDate, tags, timeEstimate: timeEst };
-    onCreate?.(newTaskData);
-    if (dueDate) syncTaskToGoogleCalendar(user.uid, newTaskData).catch(() => {});
-    onClose();
+    if (!title.trim()) { alert('Task title is required.'); return; }
+    if (onCreate) {
+      const newTaskData = { title: title.trim(), status, priority, description, notes, assignedTo: assignees, startDate, dueDate };
+      onCreate(newTaskData);
+      if (dueDate) syncTaskToGoogleCalendar(user.uid, newTaskData);
+      onClose();
+    }
   };
 
-  // ── Comments ──────────────────────────────────────────
+  // ── Assignees ────────────────────────────────────────────
+  const toggleAssignee = (member) => {
+    const existing = assignees.find(a => a.id === member.id);
+    const updated = existing
+      ? assignees.filter(a => a.id !== member.id)
+      : [...assignees, { id: member.id, name: member.name, photoURL: member.photoURL, email: member.email }];
+    setAssignees(updated);
+    saveField('assignedTo', updated);
+    if (!existing) sendNotification(member.id, user, 'assignment', `assigned you to "${task?.title || 'a new task'}"`, task?.id);
+  };
+
+  // ── Comments ────────────────────────────────────────────
   const handleSendComment = async () => {
     if (!commentText.trim() || !taskPath || sending) return;
     setSending(true);
     try {
       await addDoc(collection(db, taskPath, 'comments'), {
-        text: commentText.trim(), authorId: user.uid,
-        authorName: user.name || user.email, authorPhoto: user.photoURL || null,
-        createdAt: serverTimestamp(), reactions: {}, type: 'text'
+        text: commentText.trim(),
+        authorId: user.uid,
+        authorName: user.name || user.email,
+        createdAt: serverTimestamp(),
+        reactions: {},
+        type: 'text',
       });
-      commentText.split(/\s+/).filter(w => w.startsWith('@')).forEach(w => {
-        const m = members.find(x => x.name?.toLowerCase() === w.slice(1).toLowerCase());
-        if (m) sendNotification(m.id, user, 'mention', `mentioned you in "${task?.title}"`, task?.id);
+      const words = commentText.trim().split(/\s+/);
+      words.filter(w => w.startsWith('@')).forEach(w => {
+        const mentionName = w.substring(1);
+        const member = members.find(m => m.name?.toLowerCase() === mentionName.toLowerCase());
+        if (member) sendNotification(member.id, user, 'mention', `mentioned you in "${task?.title || 'a task'}"`, task?.id);
       });
       setCommentText('');
     } finally { setSending(false); }
-  };
-
-  const handleDeleteComment = async (commentId) => {
-    if (!taskPath) return;
-    await deleteDoc(doc(db, taskPath, 'comments', commentId));
-  };
-
-  const toggleReaction = async (commentId, emoji) => {
-    if (!taskPath) return;
-    const ref = doc(db, taskPath, 'comments', commentId);
-    const snap = await getDoc(ref);
-    const current = snap.data()?.reactions?.[emoji] || [];
-    const updated = current.includes(user.uid) ? current.filter(id => id !== user.uid) : [...current, user.uid];
-    await updateDoc(ref, { [`reactions.${emoji}`]: updated });
   };
 
   const handleCommentInput = (e) => {
@@ -426,10 +432,10 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
     commentInputRef.current?.focus();
   };
 
-  // ── Derived ───────────────────────────────────────────
-  const isOverdue = dueDate && isPast(new Date(dueDate + 'T23:59:59')) && status !== 'done';
-  const statusCfg   = STATUSES.find(s => s.id === status) || STATUSES[0];
+  // ── Derived ─────────────────────────────────────────────
+  const isOverdue = dueDate && isPast(new Date(dueDate)) && status !== 'done';
   const priorityCfg = PRIORITIES.find(p => p.label === priority) || PRIORITIES[1];
+  const statusCfg = STATUSES.find(s => s.id === status) || STATUSES[0];
   const filteredMembers = members.filter(m =>
     m.name?.toLowerCase().includes(assigneeSearch.toLowerCase()) ||
     m.email?.toLowerCase().includes(assigneeSearch.toLowerCase())
@@ -438,679 +444,613 @@ export default function TaskDetailPanel({ task, onClose, onUpdate, onCreate, onD
 
   if (!task) return null;
 
-  // ── Activity label ────────────────────────────────────
-  const activityLabel = (log) => {
-    switch (log.type) {
-      case 'created':         return <><b>{log.byName}</b> created this task</>;
-      case 'status_changed':  return <><b>{log.byName}</b> changed status from <b>{log.from}</b> → <b>{log.to}</b></>;
-      case 'priority_changed':return <><b>{log.byName}</b> changed priority to <b>{log.to}</b></>;
-      case 'assigned':        return <><b>{log.byName}</b> assigned <b>{log.memberName}</b></>;
-      case 'unassigned':      return <><b>{log.byName}</b> removed <b>{log.memberName}</b></>;
-      case 'tag_added':       return <><b>{log.byName}</b> added tag <b>{log.tag}</b></>;
-      case 'tag_removed':     return <><b>{log.byName}</b> removed tag <b>{log.tag}</b></>;
-      case 'due_date_set':    return <><b>{log.byName}</b> set due date to <b>{log.to}</b></>;
-      default: return <><b>{log.byName}</b> updated the task</>;
-    }
-  };
-
   return (
     <AnimatePresence>
-      {/* Toast */}
-      <AnimatePresence>{toast && <Toast msg={toast} onDone={() => setToast('')} />}</AnimatePresence>
+      {/* Toast notification */}
+      <AnimatePresence>
+        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+      </AnimatePresence>
 
       <div className="fixed inset-0 z-[200] flex items-stretch justify-end">
         {/* Backdrop */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.25 }} onClick={onClose}
-          className="absolute inset-0 bg-dark-900/70 backdrop-blur-sm" />
+          transition={{ duration: 0.3 }} onClick={onClose}
+          className="absolute inset-0 bg-dark-900/60 backdrop-blur-md" />
 
         {/* Panel */}
         <motion.div
-          initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-          transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.75 }}
-          className="relative z-10 w-full max-w-[88vw] xl:max-w-[1240px] bg-[#0f1117] border-l border-white/8 flex h-full shadow-2xl"
-          onClick={e => {
-            // close dropdowns on panel click
-            if (showStatusMenu)   setShowStatusMenu(false);
-            if (showPriorityMenu) setShowPriorityMenu(false);
-            if (showTagMenu)      setShowTagMenu(false);
-            if (showAssigneeMenu) setShowAssigneeMenu(false);
-            if (showMoreMenu)     setShowMoreMenu(false);
-          }}
+          initial={{ x: '100%', opacity: 0.5 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0.5 }}
+          transition={{ type: 'spring', damping: 30, stiffness: 300, mass: 0.8 }}
+          className="relative z-10 w-full max-w-[90vw] xl:max-w-[1300px] bg-dark-900/95 border-l border-white/10 flex flex-col h-full shadow-[0_0_40px_rgba(0,0,0,0.5)] overflow-hidden"
         >
+          <div className="flex flex-1 min-h-0 bg-gradient-to-br from-dark-900 to-dark-850">
 
-          {/* ═══ LEFT PANE ════════════════════════════════════════════════ */}
-          <div className="flex-[1.4] flex flex-col overflow-hidden border-r border-white/5 min-w-0">
+            {/* ── LEFT PANE ── */}
+            <div className="flex-[5.5] flex flex-col overflow-y-auto custom-scrollbar border-r border-white/5 min-w-0 relative">
 
-            {/* ── Sticky header ── */}
-            <div className="shrink-0 px-7 py-4 border-b border-white/5 bg-[#0f1117]/90 backdrop-blur-xl flex items-center gap-3">
-              {/* Back */}
-              <button onClick={onClose}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all shrink-0">
-                <ArrowLeft size={17} />
-              </button>
+              {/* Sticky Header */}
+              <div className="sticky top-0 z-20 bg-dark-900/80 backdrop-blur-xl px-10 py-5 border-b border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-4 text-sm text-slate-400">
+                  <motion.button whileHover={{ x: -2 }} whileTap={{ scale: 0.9 }}
+                    onClick={onClose}
+                    className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-slate-300 border border-transparent hover:border-white/10">
+                    <ArrowLeft size={18} />
+                  </motion.button>
+                  <div className="flex items-center gap-2.5 font-medium">
+                    <span className="text-slate-500">Task</span>
+                    <ChevronDown size={14} className="text-slate-600 -rotate-90" />
+                    <span className="px-2 py-1 bg-white/5 rounded-md text-slate-200 border border-white/5">
+                      {task.id ? `#${task.id.slice(-6).toUpperCase()}` : 'Draft'}
+                    </span>
+                  </div>
+                </div>
 
-              {/* Task ID */}
-              <span className="text-[11px] font-mono text-slate-600 shrink-0">
-                {task.id ? `#${task.id.slice(-8).toUpperCase()}` : 'Draft'}
-              </span>
+                <div className="flex items-center gap-2">
+                  {isNewTask ? (
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                      onClick={handleCreate}
+                      className="px-5 py-2 flex items-center gap-2 text-xs font-black text-white bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] uppercase tracking-widest">
+                      <Plus size={14} /> Create Task
+                    </motion.button>
+                  ) : (
+                    <>
+                      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                        onClick={handleShare}
+                        className="px-3 py-1.5 flex items-center gap-2 text-xs font-bold text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors">
+                        <ClipboardCopy size={13} /> Copy Link
+                      </motion.button>
 
-              <div className="w-px h-4 bg-white/10 shrink-0" />
-
-              {/* Status pill */}
-              <div className="relative" onClick={e => e.stopPropagation()}>
-                <button onClick={() => setShowStatusMenu(v => !v)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all hover:bg-white/5 ${statusCfg.ring} border-opacity-50`}>
-                  {statusCfg.icon}
-                  <span className="text-slate-200">{statusCfg.label}</span>
-                  <ChevronDown size={11} className="text-slate-500" />
-                </button>
-                <AnimatePresence>
-                  {showStatusMenu && (
-                    <motion.div initial={{ opacity: 0, y: -4, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                      className="absolute top-full left-0 mt-1.5 w-44 bg-dark-800 border border-white/10 rounded-xl shadow-2xl z-50 py-1 overflow-hidden">
-                      {STATUSES.map(s => (
-                        <button key={s.id} onClick={() => handleStatusChange(s.id)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold hover:bg-white/5 transition-colors text-left ${status === s.id ? 'text-white' : 'text-slate-400'}`}>
-                          {s.icon} {s.label}
-                          {status === s.id && <Check size={12} className="ml-auto text-primary-400" />}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Priority pill */}
-              <div className="relative" onClick={e => e.stopPropagation()}>
-                <button onClick={() => setShowPriorityMenu(v => !v)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all hover:bg-white/5 ${priorityCfg.border} ${priorityCfg.text}`}>
-                  <span className={`w-2 h-2 rounded-full ${priorityCfg.dot} shrink-0`} />
-                  {priorityCfg.label}
-                  <ChevronDown size={11} className="opacity-60" />
-                </button>
-                <AnimatePresence>
-                  {showPriorityMenu && (
-                    <motion.div initial={{ opacity: 0, y: -4, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                      className="absolute top-full left-0 mt-1.5 w-36 bg-dark-800 border border-white/10 rounded-xl shadow-2xl z-50 py-1 overflow-hidden">
-                      {PRIORITIES.map(p => (
-                        <button key={p.label} onClick={() => handlePriorityChange(p.label)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold hover:bg-white/5 transition-colors text-left ${p.text}`}>
-                          <span className={`w-2 h-2 rounded-full ${p.dot} shrink-0`} /> {p.label}
-                          {priority === p.label && <Check size={11} className="ml-auto text-white/50" />}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Save state */}
-              <div className="ml-auto flex items-center gap-2">
-                <SaveBadge state={saveState} />
-
-                {/* Actions */}
-                {isNewTask ? (
-                  <button onClick={handleCreate} disabled={!title.trim()}
-                    className="px-4 py-1.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-xs font-black rounded-lg transition-all flex items-center gap-1.5">
-                    <Plus size={13} /> Create Task
-                  </button>
-                ) : (
-                  <>
-                    <button onClick={handleShare}
-                      className="p-1.5 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all" title="Copy link">
-                      <ClipboardCopy size={15} />
-                    </button>
-
-                    {/* More menu */}
-                    <div className="relative" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => setShowMoreMenu(v => !v)}
-                        className="p-1.5 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all">
-                        <MoreHorizontal size={16} />
-                      </button>
-                      <AnimatePresence>
-                        {showMoreMenu && (
-                          <motion.div initial={{ opacity: 0, scale: 0.95, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="absolute right-0 top-full mt-1.5 w-48 bg-dark-800 border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 overflow-hidden">
-                            <button onClick={() => { navigator.clipboard.writeText(task.id || ''); setShowMoreMenu(false); setToast('ID copied!'); }}
-                              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 transition-colors text-left">
-                              <Copy size={13} /> Copy Task ID
-                            </button>
-                            <button onClick={() => { handleShare(); setShowMoreMenu(false); }}
-                              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 transition-colors text-left">
-                              <ClipboardCopy size={13} /> Share Link
-                            </button>
-                            <div className="border-t border-white/5 my-1" />
-                            {confirmDelete ? (
-                              <div className="px-3 py-2 space-y-1.5">
-                                <p className="text-xs text-red-300 font-semibold">Delete this task?</p>
-                                <div className="flex gap-2">
-                                  <button onClick={() => setConfirmDelete(false)}
-                                    className="flex-1 py-1 text-xs bg-dark-700 hover:bg-dark-600 text-slate-300 rounded-lg transition-colors">
-                                    Cancel
-                                  </button>
-                                  <button onClick={() => { setShowMoreMenu(false); handleDeleteTask(); }}
-                                    disabled={deleting}
-                                    className="flex-1 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors flex items-center justify-center gap-1 disabled:opacity-50">
-                                    {deleting ? <Loader2 size={11} className="animate-spin" /> : 'Delete'}
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <button onClick={() => setConfirmDelete(true)}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors text-left">
-                                <Trash2 size={13} /> Delete Task
+                      <div className="relative">
+                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                          onClick={() => setShowMoreMenu(v => !v)}
+                          className="p-1.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg border border-transparent hover:border-white/10 transition-colors">
+                          <MoreHorizontal size={18} />
+                        </motion.button>
+                        <AnimatePresence>
+                          {showMoreMenu && (
+                            <motion.div initial={{ opacity: 0, scale: 0.95, y: -5 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                              className="absolute right-0 top-full mt-1 w-44 bg-dark-800 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden py-1">
+                              <button onClick={() => { navigator.clipboard.writeText(task.id || ''); setShowMoreMenu(false); setToast('Task ID copied!'); }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors text-left">
+                                <Copy size={13} /> Copy Task ID
                               </button>
-                            )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </>
-                )}
+                              <button onClick={() => { handleShare(); setShowMoreMenu(false); }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors text-left">
+                                <Share size={13} /> Share Link
+                              </button>
+                              <div className="border-t border-white/5 my-1" />
+                              <button onClick={() => { setShowMoreMenu(false); handleDeleteTask(); }}
+                                disabled={deleting}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-red-500/10 text-sm text-red-400 hover:text-red-300 transition-colors text-left disabled:opacity-50">
+                                {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                                Delete Task
+                              </button>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* ── Scrollable content ── */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <div className="px-8 py-7 flex flex-col gap-7 max-w-3xl">
+              {/* Task Content */}
+              <div className="px-10 py-8 flex flex-col gap-8 max-w-4xl mx-auto w-full">
 
                 {/* Title */}
-                <textarea
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  onBlur={() => saveField('title', title)}
-                  rows={1}
-                  placeholder="Task title…"
-                  className="w-full bg-transparent text-[28px] font-extrabold text-white tracking-tight resize-none outline-none placeholder:text-slate-700 leading-snug"
-                  style={{ minHeight: '40px' }}
-                  onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-                />
+                <div className="group relative">
+                  <div className="absolute -left-6 top-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-1.5 h-6 bg-primary-500 rounded-r-full" />
+                  </div>
+                  <textarea
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    onBlur={() => saveField('title', title)}
+                    rows={1}
+                    className="w-full bg-transparent text-4xl font-extrabold text-white tracking-tight resize-none outline-none placeholder:text-slate-600 focus:bg-white/[0.02] rounded-2xl transition-all p-2 -ml-2 border border-transparent focus:border-white/10"
+                    placeholder="Task Title..."
+                    style={{ minHeight: '64px', lineHeight: '1.2' }}
+                    onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                  />
+                </div>
 
-                {/* ── Properties strip ── */}
-                <div className="flex flex-wrap gap-1.5 -mx-1.5" onClick={e => e.stopPropagation()}>
+                {/* Properties Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 bg-white/[0.02] rounded-2xl border border-white/5">
 
-                  {/* Assignees */}
-                  <div className="relative">
-                    <button onClick={() => setShowAssigneeMenu(v => !v)}
-                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/5 border border-transparent hover:border-white/8 transition-all text-xs text-slate-400 hover:text-white">
-                      <Users size={13} className="text-slate-500" />
-                      {assignees.length === 0 ? (
-                        <span>Assign</span>
-                      ) : (
-                        <div className="flex items-center -space-x-1.5">
-                          {assignees.slice(0, 3).map(a => <Avatar key={a.id} name={a.name} photoURL={a.photoURL} size={5} />)}
-                          {assignees.length > 3 && <span className="text-[10px] text-slate-400 pl-2">+{assignees.length - 3}</span>}
-                        </div>
-                      )}
+                  {/* Status */}
+                  <div className="flex flex-col gap-2 relative">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <Activity size={12} /> Status
+                    </span>
+                    <button onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                      className="flex items-center justify-between w-full px-3 py-2 bg-dark-800/50 hover:bg-dark-700/50 border border-white/5 rounded-xl text-sm font-medium text-white transition-all text-left group">
+                      <span className="flex items-center gap-2">{statusCfg.icon} {statusCfg.label}</span>
+                      <ChevronDown size={14} className="text-slate-500 group-hover:text-white transition-colors" />
                     </button>
-                    <AnimatePresence>
-                      {showAssigneeMenu && (
-                        <motion.div initial={{ opacity: 0, y: -4, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -4 }}
-                          className="absolute top-full left-0 mt-1.5 w-60 bg-dark-800 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
-                          <div className="p-2 border-b border-white/5">
-                            <div className="flex items-center gap-2 bg-dark-900/60 rounded-lg px-2.5 py-1.5">
-                              <Search size={12} className="text-slate-500" />
-                              <input autoFocus value={assigneeSearch} onChange={e => setAssigneeSearch(e.target.value)}
-                                placeholder="Search member…" className="w-full bg-transparent text-xs text-white outline-none placeholder:text-slate-500" />
-                            </div>
-                          </div>
-                          <div className="max-h-44 overflow-y-auto custom-scrollbar p-1">
-                            {filteredMembers.length === 0
-                              ? <p className="text-xs text-slate-600 text-center py-3">No members found</p>
-                              : filteredMembers.map(m => {
-                                const isAssigned = assignees.some(a => a.id === m.id);
-                                return (
-                                  <button key={m.id} onClick={() => toggleAssignee(m)}
-                                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/5 transition-colors text-left">
-                                    <Avatar name={m.name} photoURL={m.photoURL} size={6} />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-semibold text-white truncate">{m.name}</p>
-                                      <p className="text-[10px] text-slate-500 truncate">{m.email}</p>
-                                    </div>
-                                    {isAssigned && <Check size={12} className="text-primary-400 shrink-0" />}
-                                  </button>
-                                );
-                              })}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                    {showStatusDropdown && (
+                      <div className="absolute top-full left-0 mt-1 w-full bg-dark-800 border border-white/10 rounded-xl shadow-xl z-50 py-1">
+                        {STATUSES.map(s => (
+                          <button key={s.id} onClick={() => { setStatus(s.id); saveField('status', s.id); setShowStatusDropdown(false); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 text-sm text-white transition-colors text-left">
+                            {s.icon} {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Due date */}
-                  <div className="relative flex items-center">
-                    <Calendar size={13} className="text-slate-600 absolute left-2.5 pointer-events-none" />
-                    <input type="date" value={dueDate}
-                      onChange={e => {
-                        setDueDate(e.target.value);
-                        saveField('dueDate', e.target.value, { type: 'due_date_set', to: e.target.value });
-                      }}
-                      className={`pl-8 pr-3 py-1.5 rounded-lg border bg-transparent text-xs outline-none cursor-pointer transition-all
-                        [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer
-                        hover:bg-white/5 hover:border-white/8
-                        ${isOverdue ? 'border-red-500/40 text-red-300' : 'border-transparent text-slate-400 hover:text-white'}`}
-                      title="Due date"
-                    />
-                    {!dueDate && <span className="absolute left-8 text-xs text-slate-600 pointer-events-none">Due date</span>}
+                  {/* Priority */}
+                  <div className="flex flex-col gap-2 relative">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <Flag size={12} /> Priority
+                    </span>
+                    <button onClick={() => setShowPriorityDropdown(!showPriorityDropdown)}
+                      className={`flex items-center justify-between w-full px-3 py-2 ${priorityCfg.color} border ${priorityCfg.border} ${priorityCfg.hover} rounded-xl text-sm font-bold ${priorityCfg.text} transition-all text-left group`}>
+                      <span className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${priorityCfg.dot}`} /> {priorityCfg.label}
+                      </span>
+                      <ChevronDown size={14} className="opacity-50 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                    {showPriorityDropdown && (
+                      <div className="absolute top-full left-0 mt-1 w-full bg-dark-800 border border-white/10 rounded-xl shadow-xl z-50 py-1">
+                        {PRIORITIES.map(p => (
+                          <button key={p.label} onClick={() => { setPriority(p.label); saveField('priority', p.label); setShowPriorityDropdown(false); }}
+                            className={`w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 text-sm font-bold ${p.text} transition-colors text-left`}>
+                            <span className={`w-2 h-2 rounded-full ${p.dot}`} /> {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Start date */}
-                  <div className="relative flex items-center">
-                    <Clock size={13} className="text-slate-600 absolute left-2.5 pointer-events-none" />
+                  {/* Start Date */}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <Calendar size={12} /> Start Date
+                    </span>
                     <input type="date" value={startDate}
                       onChange={e => { setStartDate(e.target.value); saveField('startDate', e.target.value); }}
-                      className="pl-8 pr-3 py-1.5 rounded-lg border border-transparent hover:border-white/8 bg-transparent text-xs text-slate-400 hover:text-white outline-none cursor-pointer transition-all hover:bg-white/5 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                      title="Start date"
-                    />
-                    {!startDate && <span className="absolute left-8 text-xs text-slate-600 pointer-events-none">Start date</span>}
+                      className="w-full bg-dark-800/50 hover:bg-dark-700/50 border border-white/5 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50 transition-all cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:hover:opacity-100" />
                   </div>
 
-                  {/* Time estimate */}
-                  <div className="relative flex items-center">
-                    <Timer size={13} className="text-slate-600 absolute left-2.5 pointer-events-none z-10" />
-                    <input
-                      value={timeEst}
-                      onChange={e => setTimeEst(e.target.value)}
-                      onBlur={() => saveField('timeEstimate', timeEst)}
-                      placeholder="Estimate"
-                      className="pl-8 pr-3 py-1.5 w-28 rounded-lg border border-transparent hover:border-white/8 bg-transparent text-xs text-slate-400 hover:text-white outline-none transition-all hover:bg-white/5 placeholder:text-slate-600 focus:border-white/10 focus:bg-white/5"
-                      title="e.g. 2h, 3d, 1w"
-                    />
-                  </div>
-
-                  {/* Tags */}
-                  <div className="relative" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => setShowTagMenu(v => !v)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-transparent hover:border-white/8 hover:bg-white/5 transition-all">
-                      {tags.length === 0 ? (
-                        <><Tag size={12} className="text-slate-600" /><span className="text-xs text-slate-600">Add label</span></>
-                      ) : (
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {tags.map(t => {
-                            const cfg = tagCfg(t);
-                            return (
-                              <span key={t} className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
-                                {t}
-                              </span>
-                            );
-                          })}
-                          <Tag size={11} className="text-slate-600 ml-0.5" />
-                        </div>
+                  {/* Due Date */}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <Clock size={12} /> Due Date
+                    </span>
+                    <div className="relative">
+                      <input type="date" value={dueDate}
+                        onChange={e => { setDueDate(e.target.value); saveField('dueDate', e.target.value); }}
+                        className={`w-full bg-dark-800/50 hover:bg-dark-700/50 border rounded-xl px-3 py-2 text-sm outline-none transition-all cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:hover:opacity-100 ${
+                          isOverdue ? 'border-red-500/50 text-red-300 focus:border-red-500' : 'border-white/5 text-slate-200 focus:border-primary-500'
+                        }`} />
+                      {isOverdue && (
+                        <span className="absolute -top-2 -right-2 text-[9px] text-red-200 font-black uppercase bg-red-500 px-1.5 py-0.5 rounded">
+                          Overdue
+                        </span>
                       )}
-                    </button>
-                    <AnimatePresence>
-                      {showTagMenu && (
-                        <motion.div initial={{ opacity: 0, y: -4, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -4 }}
-                          className="absolute top-full left-0 mt-1.5 w-52 bg-dark-800 border border-white/10 rounded-xl shadow-2xl z-50 p-2">
-                          <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest px-1.5 pb-1.5">Labels</p>
-                          <div className="grid grid-cols-2 gap-1">
-                            {TAG_OPTIONS.map(t => {
-                              const active = tags.includes(t.label);
+                    </div>
+                  </div>
+
+                  {/* Assignees */}
+                  <div className="flex flex-col gap-2 col-span-2 relative mt-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <Users size={12} /> Assignees
+                    </span>
+                    <div className="flex flex-wrap gap-2 items-center min-h-[36px]">
+                      <AnimatePresence>
+                        {assignees.map(a => (
+                          <MemberChip key={a.id} member={a} onRemove={id => {
+                            const updated = assignees.filter(x => x.id !== id);
+                            setAssignees(updated);
+                            saveField('assignedTo', updated);
+                          }} />
+                        ))}
+                      </AnimatePresence>
+                      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowAssigneeSearch(v => !v)}
+                        className="h-7 px-2.5 rounded-full border border-dashed border-white/20 hover:border-primary-400 flex items-center gap-1 text-slate-400 hover:text-primary-300 transition-all text-xs font-medium">
+                        <Plus size={12} /> Add
+                      </motion.button>
+
+                      {showAssigneeSearch && (
+                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                          className="absolute top-full left-0 mt-2 w-64 bg-dark-800/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] z-50 overflow-hidden">
+                          <div className="p-2 border-b border-white/5">
+                            <div className="flex items-center gap-2 bg-dark-900/50 rounded-xl px-3 py-1.5 border border-white/5">
+                              <Search size={14} className="text-slate-500" />
+                              <input autoFocus value={assigneeSearch} onChange={e => setAssigneeSearch(e.target.value)}
+                                placeholder="Search member…"
+                                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500" />
+                            </div>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto custom-scrollbar p-1">
+                            {filteredMembers.length === 0 ? (
+                              <p className="text-xs text-slate-500 text-center py-3">No members found</p>
+                            ) : filteredMembers.map(m => {
+                              const isAssigned = assignees.some(a => a.id === m.id);
                               return (
-                                <button key={t.label} onClick={() => toggleTag(t.label)}
-                                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all text-left ${
-                                    active ? `${t.bg} ${t.text} ${t.border}` : 'bg-transparent text-slate-500 border-transparent hover:bg-white/5 hover:text-slate-300'
-                                  }`}>
-                                  {active && <Check size={10} className="shrink-0" />}
-                                  {t.label}
+                                <button key={m.id}
+                                  onClick={() => { toggleAssignee(m); setShowAssigneeSearch(false); setAssigneeSearch(''); }}
+                                  className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-xl text-sm transition-colors text-left ${isAssigned ? 'opacity-50' : ''}`}>
+                                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-[10px] font-black uppercase">
+                                    {m.name?.charAt(0)}
+                                  </span>
+                                  <div className="flex flex-col flex-1">
+                                    <span className="font-medium text-white">{m.name}</span>
+                                    <span className="text-[10px] text-slate-500">{m.email}</span>
+                                  </div>
+                                  {isAssigned && <Check size={12} className="text-primary-400" />}
                                 </button>
                               );
                             })}
                           </div>
                         </motion.div>
                       )}
-                    </AnimatePresence>
+                    </div>
                   </div>
                 </div>
 
-                {/* ── Description ── */}
-                <div className="space-y-2.5">
+                {/* Description */}
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1.5">
-                      <AlignLeft size={12} /> Description
-                    </span>
-                    <button onClick={() => {
-                      const prompt = encodeURIComponent(`Write a clear task description for: "${title || 'this task'}". Include goal, steps, and acceptance criteria.`);
-                      window.open(`https://chat.openai.com/?q=${prompt}`, '_blank');
-                    }} className="flex items-center gap-1 text-[10px] font-bold text-primary-400/70 hover:text-primary-300 transition-colors">
-                      <Sparkles size={11} /> AI Draft
-                    </button>
+                    <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase tracking-wider">
+                      <AlignLeft size={16} className="text-primary-400" /> Details
+                    </h3>
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        const prompt = encodeURIComponent(`Write a detailed task description for: "${title || 'a task'}". Include goals, acceptance criteria, and steps.`);
+                        window.open(`https://chat.openai.com/?q=${prompt}`, '_blank');
+                      }}
+                      className="group flex items-center gap-2 text-xs font-bold text-white bg-gradient-to-r from-primary-600 to-purple-600 hover:from-primary-500 hover:to-purple-500 px-4 py-1.5 rounded-full transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] border border-white/10">
+                      <Sparkles size={14} className="group-hover:animate-pulse" /> AI Assist
+                    </motion.button>
                   </div>
                   <textarea
                     value={description}
                     onChange={e => setDescription(e.target.value)}
                     onBlur={() => saveField('description', description)}
                     rows={5}
-                    placeholder="Add context, goals, or acceptance criteria…"
-                    className="w-full bg-dark-800/30 hover:bg-dark-800/50 border border-white/5 hover:border-white/8 focus:border-primary-500/40 focus:bg-dark-800/60 rounded-xl px-4 py-3 text-sm text-slate-300 outline-none resize-none placeholder:text-slate-700 transition-all"
+                    placeholder="Add a detailed description… or click AI Assist to generate one."
+                    className="w-full bg-white/[0.01] hover:bg-white/[0.02] border border-white/5 hover:border-white/10 rounded-2xl px-5 py-4 text-base text-slate-300 outline-none focus:border-primary-500/50 transition-all resize-y placeholder:text-slate-600 min-h-[100px]"
                   />
                 </div>
 
-                {/* ── Subtasks ── */}
+                {/* ── Action Modules ── */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <motion.button whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}
+                    onClick={() => { setShowSubtasks(true); setTimeout(() => subtaskInputRef.current?.focus(), 100); }}
+                    className="flex items-start gap-3 p-3 bg-white/[0.02] hover:bg-blue-500/5 border border-blue-500/20 hover:border-blue-500/40 rounded-2xl transition-all text-left group">
+                    <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400"><CheckSquare size={16} /></div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-slate-200 group-hover:text-white">Subtasks</span>
+                      <span className="text-[10px] font-medium text-slate-500">
+                        {subtasks.length > 0 ? `${doneCount}/${subtasks.length} done` : 'Break it down'}
+                      </span>
+                    </div>
+                  </motion.button>
+
+                  <motion.button whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}
+                    onClick={() => setTimeout(() => document.getElementById('attach-url-input')?.focus(), 100)}
+                    className="flex items-start gap-3 p-3 bg-white/[0.02] hover:bg-pink-500/5 border border-pink-500/20 hover:border-pink-500/40 rounded-2xl transition-all text-left group">
+                    <div className="p-2 rounded-xl bg-pink-500/10 text-pink-400"><Link2 size={16} /></div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-slate-200 group-hover:text-white">Add Link</span>
+                      <span className="text-[10px] font-medium text-slate-500">
+                        {attachments.length > 0 ? `${attachments.length} doc${attachments.length > 1 ? 's' : ''}` : 'Figma, Notion…'}
+                      </span>
+                    </div>
+                  </motion.button>
+
+                  <motion.button whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}
+                    onClick={handleShare}
+                    className="flex items-start gap-3 p-3 bg-white/[0.02] hover:bg-amber-500/5 border border-amber-500/20 hover:border-amber-500/40 rounded-2xl transition-all text-left group">
+                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400"><Share size={16} /></div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-slate-200 group-hover:text-white">Share Task</span>
+                      <span className="text-[10px] font-medium text-slate-500">Copy link</span>
+                    </div>
+                  </motion.button>
+
+                  <motion.button whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}
+                    onClick={handleDeleteTask}
+                    disabled={isNewTask || deleting}
+                    className="flex items-start gap-3 p-3 bg-white/[0.02] hover:bg-red-500/5 border border-red-500/20 hover:border-red-500/40 rounded-2xl transition-all text-left group disabled:opacity-30">
+                    <div className="p-2 rounded-xl bg-red-500/10 text-red-400">
+                      {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-slate-200 group-hover:text-red-300">Delete Task</span>
+                      <span className="text-[10px] font-medium text-slate-500">Remove permanently</span>
+                    </div>
+                  </motion.button>
+                </div>
+
+                {/* ── Subtasks Section ── */}
+                <AnimatePresence>
+                  {showSubtasks && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                      className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase tracking-wider">
+                          <CheckSquare size={16} className="text-blue-400" />
+                          Subtasks
+                          {subtasks.length > 0 && (
+                            <span className="text-xs font-medium text-slate-500 normal-case tracking-normal">
+                              {doneCount}/{subtasks.length}
+                            </span>
+                          )}
+                        </h3>
+                        <button onClick={() => setShowSubtasks(false)} className="text-slate-600 hover:text-slate-400 transition-colors">
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      {subtasks.length > 0 && (
+                        <div className="w-full h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                          <motion.div animate={{ width: `${subtaskProgress}%` }} className="h-full bg-emerald-500 rounded-full transition-all" />
+                        </div>
+                      )}
+
+                      <div className="space-y-0.5 bg-white/[0.01] rounded-xl border border-white/5 p-3">
+                        {subtasks.length === 0 ? (
+                          <p className="text-xs text-slate-600 text-center py-2">No subtasks yet. Add one below.</p>
+                        ) : subtasks.map(st => (
+                          <SubtaskRow key={st.id} subtask={st} taskPath={taskPath} onDelete={handleDeleteSubtask} />
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={subtaskInputRef}
+                          value={newSubtask}
+                          onChange={e => setNewSubtask(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(); }}
+                          placeholder={isNewTask ? 'Save task first to add subtasks…' : 'Add a subtask… (press Enter)'}
+                          disabled={isNewTask}
+                          className="flex-1 bg-dark-800/50 border border-white/5 focus:border-primary-500/50 rounded-xl px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 transition-all disabled:opacity-40"
+                        />
+                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                          onClick={handleAddSubtask}
+                          disabled={!newSubtask.trim() || addingSubtask || isNewTask}
+                          className="px-4 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5">
+                          {addingSubtask ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Add
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* ── Documents & Links (always visible) ── */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase tracking-wider">
+                    <Paperclip size={16} className="text-pink-400" />
+                    Documents &amp; Links
+                    {attachments.length > 0 && (
+                      <span className="text-xs font-medium text-slate-500 normal-case">{attachments.length}</span>
+                    )}
+                  </h3>
+
+                  {attachments.length > 0 ? (
+                    <div className="space-y-2">
+                      {attachments.map(att => (
+                        <AttachmentCard key={att.id} att={att} onDelete={handleDeleteAttachment} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-5 text-slate-600 text-xs text-center bg-white/[0.01] border border-dashed border-white/5 rounded-xl">
+                      <Paperclip size={20} className="mb-1.5 opacity-40" />
+                      No documents yet — paste a Figma, Notion, GitHub or Google Docs link below.
+                    </div>
+                  )}
+
+                  <div className="p-3 bg-white/[0.02] rounded-xl border border-white/5 space-y-2">
+                    <input
+                      id="attach-url-input"
+                      value={attachUrl}
+                      onChange={e => setAttachUrl(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddAttachment(); }}
+                      placeholder="Paste a URL — Figma, Notion, GitHub, Google Docs…"
+                      className="w-full bg-dark-800/50 border border-white/5 focus:border-pink-500/50 rounded-xl px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 transition-all"
+                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={attachName}
+                        onChange={e => setAttachName(e.target.value)}
+                        placeholder="Label (optional, e.g. 'Design File')"
+                        className="flex-1 bg-dark-800/50 border border-white/5 focus:border-pink-500/50 rounded-xl px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 transition-all"
+                      />
+                      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                        onClick={handleAddAttachment}
+                        disabled={!attachUrl.trim() || addingAttachment}
+                        className="px-4 py-2 bg-pink-600 hover:bg-pink-500 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0">
+                        {addingAttachment ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Add
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Quick Notes ── */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1.5">
-                      <CheckSquare size={12} /> Subtasks
-                      {subtasks.length > 0 && (
-                        <span className="normal-case tracking-normal font-medium text-slate-500 ml-1">
-                          {doneCount}/{subtasks.length}
-                        </span>
-                      )}
-                    </span>
-                    {subtasks.length > 0 && (
-                      <span className={`text-[10px] font-bold ${progress === 100 ? 'text-emerald-400' : 'text-slate-600'}`}>
-                        {progress}%
+                    <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase tracking-wider">
+                      <StickyNote size={16} className="text-amber-400" /> Quick Notes
+                    </h3>
+                    {savingNotes && (
+                      <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                        <Loader2 size={10} className="animate-spin" /> Saving…
                       </span>
                     )}
                   </div>
-
-                  {/* Progress bar */}
-                  {subtasks.length > 0 && (
-                    <div className="h-1 w-full bg-dark-700 rounded-full overflow-hidden">
-                      <motion.div animate={{ width: `${progress}%` }} transition={{ type: 'spring', damping: 20 }}
-                        className={`h-full rounded-full ${progress === 100 ? 'bg-emerald-500' : 'bg-primary-500'}`} />
-                    </div>
-                  )}
-
-                  {/* List */}
-                  {subtasks.length > 0 && (
-                    <div className="space-y-0.5">
-                      {subtasks.map(st => (
-                        <SubtaskRow key={st.id} subtask={st} taskPath={taskPath} onDelete={handleDeleteSubtask} />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Add input */}
-                  {!isNewTask ? (
-                    <div className="flex items-center gap-2 pl-1">
-                      <button onClick={() => subtaskInputRef.current?.focus()}
-                        className="w-[18px] h-[18px] rounded-[5px] border-2 border-dashed border-white/15 hover:border-primary-400/50 flex items-center justify-center transition-all shrink-0">
-                        <Plus size={10} className="text-slate-500" />
-                      </button>
-                      <input
-                        ref={subtaskInputRef}
-                        value={newSubtask}
-                        onChange={e => setNewSubtask(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') handleAddSubtask();
-                          if (e.key === 'Escape') setNewSubtask('');
-                        }}
-                        placeholder="Add a subtask…"
-                        className="flex-1 bg-transparent text-sm text-slate-400 placeholder:text-slate-700 outline-none focus:text-white transition-colors"
-                      />
-                      {newSubtask.trim() && (
-                        <button onClick={handleAddSubtask} disabled={addingSubtask}
-                          className="text-[10px] text-primary-400 hover:text-primary-300 font-bold transition-colors shrink-0">
-                          {addingSubtask ? <Loader2 size={12} className="animate-spin" /> : 'Add'}
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-slate-700 pl-6 italic">Save task to add subtasks</p>
-                  )}
+                  <textarea
+                    value={notes}
+                    onChange={e => handleNotesChange(e.target.value)}
+                    rows={4}
+                    placeholder="Jot down quick notes, paste content snippets, or keep references here…"
+                    className="w-full bg-white/[0.01] hover:bg-white/[0.02] border border-white/5 hover:border-amber-500/20 focus:border-amber-500/30 rounded-2xl px-5 py-4 text-sm text-slate-300 outline-none transition-all resize-y placeholder:text-slate-600 min-h-[80px]"
+                  />
                 </div>
 
-                {/* ── Attachments ── */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1.5">
-                      <Paperclip size={12} /> Attachments
-                      {attachments.length > 0 && <span className="normal-case tracking-normal font-medium text-slate-500">{attachments.length}</span>}
-                    </span>
-                    {!isNewTask && (
-                      <button onClick={() => setShowAttachForm(v => !v)}
-                        className="text-[10px] font-bold text-slate-600 hover:text-primary-400 transition-colors flex items-center gap-1">
-                        <Plus size={11} /> Add link
-                      </button>
-                    )}
+              </div>
+            </div>
+
+            {/* ── RIGHT PANE: Activity ── */}
+            <div className="flex-[4] min-w-[380px] max-w-[500px] flex flex-col bg-dark-900 border-l border-white/5 h-full relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-primary-600/5 rounded-full blur-3xl pointer-events-none" />
+
+              {/* Header */}
+              <div className="h-20 px-6 border-b border-white/5 flex items-center justify-between shrink-0 relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary-500/10 rounded-xl text-primary-400"><Activity size={18} /></div>
+                  <h3 className="text-sm font-black text-white uppercase tracking-widest">Activity</h3>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] text-slate-500 font-semibold">
+                  {comments.length > 0 && `${comments.length} comment${comments.length > 1 ? 's' : ''}`}
+                </div>
+              </div>
+
+              {/* Feed */}
+              <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 custom-scrollbar relative z-10">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  className="flex gap-4 items-start opacity-60">
+                  <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 shrink-0 mt-1">
+                    <Sparkles size={12} />
                   </div>
+                  <div className="flex-1 bg-white/[0.02] border border-white/5 p-3 rounded-2xl rounded-tl-sm">
+                    <p className="text-sm text-slate-300">
+                      <span className="font-bold text-white">System</span> generated this task space
+                    </p>
+                    <span className="text-xs text-slate-500 font-medium">
+                      {task.createdAt ? format(new Date(task.createdAt), 'MMM d, h:mm a') : 'Just now'}
+                    </span>
+                  </div>
+                </motion.div>
 
-                  {/* List */}
-                  {attachments.map(att => (
-                    <div key={att.id} className="flex items-center gap-2.5 p-2.5 bg-dark-800/30 border border-white/5 rounded-xl group hover:border-white/8 transition-all">
-                      <Link2 size={13} className="text-slate-500 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-200 truncate">{att.name}</p>
-                        <p className="text-[10px] text-slate-600 truncate">{att.url}</p>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <a href={att.url} target="_blank" rel="noreferrer"
-                          className="p-1 text-slate-500 hover:text-primary-400 rounded transition-colors"><ExternalLink size={12} /></a>
-                        <button onClick={() => handleDeleteAttachment(att.id)}
-                          className="p-1 text-slate-500 hover:text-red-400 rounded transition-colors"><Trash2 size={12} /></button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Add form */}
-                  <AnimatePresence>
-                    {showAttachForm && !isNewTask && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }} className="space-y-2">
-                        <input autoFocus value={attachUrl} onChange={e => setAttachUrl(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') handleAddAttachment(); if (e.key === 'Escape') setShowAttachForm(false); }}
-                          placeholder="Paste URL (https://…)"
-                          className="w-full bg-dark-800/40 border border-white/8 focus:border-primary-500/40 rounded-lg px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 transition-all" />
-                        <div className="flex gap-2">
-                          <input value={attachName} onChange={e => setAttachName(e.target.value)}
-                            placeholder="Label (optional)"
-                            className="flex-1 bg-dark-800/40 border border-white/8 rounded-lg px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 transition-all" />
-                          <button onClick={handleAddAttachment} disabled={!attachUrl.trim()}
-                            className="px-3 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-all">
-                            Attach
-                          </button>
-                          <button onClick={() => setShowAttachForm(false)}
-                            className="px-3 py-2 bg-dark-700 hover:bg-dark-600 text-slate-400 text-xs rounded-lg transition-all">
-                            Cancel
-                          </button>
+                {comments.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-40 text-slate-500 text-sm font-medium text-center bg-white/[0.01] rounded-2xl border border-dashed border-white/5 mt-4">
+                    <MessageSquare size={24} className="mb-2 opacity-50" />
+                    No comments yet.<br />Start the conversation below!
+                  </div>
+                ) : (
+                  comments.map((c, i) => {
+                    const isMe = c.authorId === user?.uid;
+                    const time = c.createdAt?.toDate ? format(c.createdAt.toDate(), 'MMM d, h:mm a') : '...';
+                    return (
+                      <motion.div key={c.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        className={`group flex gap-4 ${isMe ? 'flex-row-reverse' : ''}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black uppercase shrink-0 mt-1 ${
+                          isMe ? 'bg-gradient-to-br from-primary-500 to-primary-700 text-white border border-primary-400/30' : 'bg-dark-700 border border-white/10 text-slate-300'
+                        }`}>
+                          {c.authorName?.charAt(0) || '?'}
                         </div>
+                        <div className={`flex flex-col flex-1 ${isMe ? 'items-end' : 'items-start'}`}>
+                          <div className="flex items-center gap-2 mb-1.5 px-1">
+                            <span className="text-sm font-bold text-slate-200">{isMe ? 'You' : c.authorName}</span>
+                            <span className="text-[10px] font-medium text-slate-500">{time}</span>
+                          </div>
+                          <div className={`px-4 py-3 text-sm text-slate-100 leading-relaxed shadow-sm max-w-[90%] border ${
+                            isMe
+                              ? 'bg-gradient-to-br from-primary-600/20 to-primary-800/20 border-primary-500/30 rounded-2xl rounded-tr-sm'
+                              : 'bg-white/[0.03] border-white/5 rounded-2xl rounded-tl-sm'
+                          }`}>
+                            {c.text}
+                          </div>
+                          <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                            <EmojiReactions reactions={c.reactions} messageId={c.id} taskPath={taskPath} />
+                            <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-dark-900/80 backdrop-blur border border-white/10 rounded-full px-2 py-1 shadow-xl">
+                              {EMOJI_SET.slice(0, 5).map(e => (
+                                <button key={e} onClick={async () => {
+                                  if (!taskPath) return;
+                                  const msgRef = doc(db, taskPath, 'comments', c.id);
+                                  const snap = await getDoc(msgRef);
+                                  const current = (snap.data()?.reactions || {})[e] || [];
+                                  const updated = current.includes(user.uid) ? current.filter(id => id !== user.uid) : [...current, user.uid];
+                                  await updateDoc(msgRef, { [`reactions.${e}`]: updated });
+                                }} className="text-base hover:scale-125 transition-transform px-1">{e}</button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                )}
+                <div ref={commentsEndRef} />
+              </div>
+
+              {/* Comment Input */}
+              <div className="p-5 bg-dark-900/80 backdrop-blur-xl border-t border-white/5 shrink-0 relative z-20">
+                <div className="relative">
+                  <AnimatePresence>
+                    {showMentions && mentionCandidates.length > 0 && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                        className="absolute bottom-full left-0 w-56 mb-3 bg-dark-800/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] overflow-hidden z-50 p-1">
+                        {mentionCandidates.map(m => (
+                          <button key={m.id} onClick={() => insertMention(m)}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-sm font-medium text-slate-200 transition-colors text-left">
+                            <span className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-[10px] uppercase">
+                              {m.name?.charAt(0)}
+                            </span>
+                            {m.name}
+                          </button>
+                        ))}
                       </motion.div>
                     )}
                   </AnimatePresence>
 
-                  {attachments.length === 0 && !showAttachForm && (
-                    <p className="text-[11px] text-slate-700 italic">No attachments yet</p>
-                  )}
-                </div>
-
-              </div>
-            </div>
-          </div>
-
-          {/* ═══ RIGHT PANE ════════════════════════════════════════════════ */}
-          <div className="w-[400px] shrink-0 flex flex-col bg-[#0b0d13] overflow-hidden">
-
-            {/* Tab bar */}
-            <div className="shrink-0 flex border-b border-white/5">
-              {[
-                { id: 'comments', label: 'Comments', icon: <MessageSquare size={13} />, count: comments.length },
-                { id: 'activity', label: 'Activity',  icon: <Zap size={13} />,            count: activityLog.length },
-              ].map(tab => (
-                <button key={tab.id} onClick={() => setRightTab(tab.id)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs font-bold transition-all border-b-2 ${
-                    rightTab === tab.id
-                      ? 'border-primary-500 text-white'
-                      : 'border-transparent text-slate-600 hover:text-slate-400'
-                  }`}>
-                  {tab.icon} {tab.label}
-                  {tab.count > 0 && (
-                    <span className={`text-[9px] px-1 rounded-full font-black ${rightTab === tab.id ? 'bg-primary-500/20 text-primary-300' : 'bg-dark-700 text-slate-500'}`}>
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Comments tab ── */}
-            {rightTab === 'comments' && (
-              <>
-                <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-5 space-y-5">
-                  {comments.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-48 text-slate-700">
-                      <MessageSquare size={28} className="mb-2 opacity-30" />
-                      <p className="text-sm font-semibold">No comments yet</p>
-                      <p className="text-xs mt-1">Start the conversation below</p>
-                    </div>
-                  ) : (
-                    comments.map((c, i) => {
-                      const isMe = c.authorId === user?.uid;
-                      const time = c.createdAt?.toDate
-                        ? formatDistanceToNow(c.createdAt.toDate(), { addSuffix: true })
-                        : '…';
-                      return (
-                        <motion.div key={c.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i < 10 ? i * 0.03 : 0 }}
-                          className="group flex gap-3">
-                          <Avatar name={c.authorName} photoURL={c.authorPhoto} size={7} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-baseline gap-2 mb-1">
-                              <span className="text-xs font-bold text-white">{isMe ? 'You' : c.authorName}</span>
-                              <span className="text-[10px] text-slate-600">{time}</span>
-                            </div>
-                            <div className="text-sm text-slate-300 leading-relaxed break-words">{c.text}</div>
-
-                            {/* Reactions */}
-                            {c.reactions && Object.entries(c.reactions).some(([, uids]) => uids?.length > 0) && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {Object.entries(c.reactions).filter(([, uids]) => uids?.length > 0).map(([emoji, uids]) => (
-                                  <button key={emoji} onClick={() => toggleReaction(c.id, emoji)}
-                                    className={`text-xs px-1.5 py-0.5 rounded-full border transition-all ${
-                                      uids.includes(user?.uid)
-                                        ? 'bg-primary-500/20 border-primary-500/40 text-primary-300'
-                                        : 'bg-dark-700 border-dark-600 text-slate-400 hover:border-dark-500'
-                                    }`}>
-                                    {emoji} {uids.length}
-                                  </button>
+                  <div className="bg-white/[0.02] border border-white/10 rounded-3xl focus-within:border-primary-500/50 focus-within:bg-white/[0.04] focus-within:shadow-[0_0_30px_rgba(99,102,241,0.1)] transition-all overflow-hidden">
+                    <textarea
+                      ref={commentInputRef}
+                      value={commentText}
+                      onChange={handleCommentInput}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+                      placeholder={isNewTask ? 'Save task to enable comments…' : 'Add a comment… (@ to mention)'}
+                      disabled={isNewTask}
+                      rows={2}
+                      className="w-full bg-transparent px-5 pt-4 pb-2 text-sm text-white outline-none resize-none placeholder:text-slate-500 custom-scrollbar disabled:opacity-50"
+                    />
+                    <div className="flex items-center justify-between px-3 pb-3 pt-1">
+                      <div className="flex items-center gap-1 bg-dark-900/50 rounded-full p-1 border border-white/5">
+                        <div className="relative">
+                          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                            onClick={() => !isNewTask && setShowEmojiPicker(v => !v)}
+                            className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors" title="Emoji">
+                            <Smile size={16} />
+                          </motion.button>
+                          <AnimatePresence>
+                            {showEmojiPicker && (
+                              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                                className="absolute bottom-12 left-0 flex flex-wrap gap-2 p-3 bg-dark-800/95 backdrop-blur border border-white/10 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] z-50 w-[220px]">
+                                {EMOJI_SET.map(e => (
+                                  <button key={e} onClick={() => { setCommentText(v => v + e); setShowEmojiPicker(false); }}
+                                    className="text-xl hover:scale-125 transition-transform p-1.5 hover:bg-white/10 rounded-xl">{e}</button>
                                 ))}
-                              </div>
+                              </motion.div>
                             )}
-
-                            {/* Hover actions */}
-                            <div className="flex items-center gap-1.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {EMOJI_SET.slice(0, 5).map(e => (
-                                <button key={e} onClick={() => toggleReaction(c.id, e)}
-                                  className="text-sm hover:scale-125 transition-transform opacity-50 hover:opacity-100">
-                                  {e}
-                                </button>
-                              ))}
-                              {isMe && (
-                                <button onClick={() => handleDeleteComment(c.id)}
-                                  className="ml-1 p-1 text-slate-700 hover:text-red-400 transition-colors rounded">
-                                  <Trash2 size={11} />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </motion.div>
-                      );
-                    })
-                  )}
-                  <div ref={feedEndRef} />
-                </div>
-
-                {/* Comment input */}
-                <div className="shrink-0 p-4 border-t border-white/5">
-                  <div className="relative">
-                    <AnimatePresence>
-                      {showMentions && mentionCandidates.length > 0 && (
-                        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
-                          className="absolute bottom-full left-0 w-52 mb-2 bg-dark-800 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden p-1">
-                          {mentionCandidates.map(m => (
-                            <button key={m.id} onClick={() => insertMention(m)}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 rounded-lg text-xs text-white transition-colors text-left">
-                              <Avatar name={m.name} photoURL={m.photoURL} size={6} /> {m.name}
-                            </button>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    <div className="bg-dark-800/60 border border-white/8 rounded-xl focus-within:border-primary-500/40 transition-all overflow-hidden">
-                      <textarea
-                        ref={commentInputRef}
-                        value={commentText}
-                        onChange={handleCommentInput}
-                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
-                        placeholder={isNewTask ? 'Save task to comment…' : 'Comment… (@ mention, ↵ send)'}
-                        disabled={isNewTask}
-                        rows={2}
-                        className="w-full bg-transparent px-4 pt-3 pb-1 text-sm text-white outline-none resize-none placeholder:text-slate-700 custom-scrollbar disabled:opacity-40"
-                      />
-                      <div className="flex items-center justify-between px-3 pb-2 pt-1">
-                        <div className="flex items-center gap-0.5">
-                          {/* Emoji */}
-                          <div className="relative">
-                            <button onClick={() => !isNewTask && setShowEmojiPicker(v => !v)}
-                              className="p-1.5 text-slate-600 hover:text-slate-300 rounded-lg transition-colors">
-                              <Smile size={15} />
-                            </button>
-                            <AnimatePresence>
-                              {showEmojiPicker && (
-                                <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}
-                                  exit={{ opacity: 0, scale: 0.92 }}
-                                  className="absolute bottom-10 left-0 flex flex-wrap gap-1.5 p-2.5 bg-dark-800 border border-white/10 rounded-xl shadow-2xl z-50 w-[200px]">
-                                  {EMOJI_SET.map(e => (
-                                    <button key={e} onClick={() => { setCommentText(v => v + e); setShowEmojiPicker(false); }}
-                                      className="text-lg hover:scale-125 transition-transform p-1 hover:bg-white/5 rounded-lg">{e}</button>
-                                  ))}
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                          {/* Mention trigger */}
-                          <button onClick={() => { if (!isNewTask) { setCommentText(v => v + '@'); commentInputRef.current?.focus(); } }}
-                            className="p-1.5 text-slate-600 hover:text-slate-300 rounded-lg transition-colors text-xs font-black">
-                            @
-                          </button>
+                          </AnimatePresence>
                         </div>
-                        <button onClick={handleSendComment} disabled={isNewTask || !commentText.trim() || sending}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-30 text-white text-xs font-bold rounded-lg transition-all">
-                          {sending ? <Loader2 size={12} className="animate-spin" /> : <><Send size={12} /> Send</>}
-                        </button>
+                        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                          onClick={() => { if (!isNewTask) { setCommentText(v => v + '@'); commentInputRef.current?.focus(); } }}
+                          disabled={isNewTask}
+                          className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition-colors font-bold disabled:opacity-50" title="Mention">
+                          @
+                        </motion.button>
                       </div>
+                      <motion.button
+                        whileHover={(!isNewTask && commentText.trim() && !sending) ? { scale: 1.05 } : {}}
+                        whileTap={(!isNewTask && commentText.trim() && !sending) ? { scale: 0.95 } : {}}
+                        onClick={handleSendComment}
+                        disabled={isNewTask || !commentText.trim() || sending}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 disabled:from-dark-700 disabled:to-dark-700 disabled:text-slate-500 text-white text-xs font-black rounded-full transition-all uppercase tracking-widest shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:shadow-none">
+                        {sending ? <Loader2 size={14} className="animate-spin" /> : <><Send size={14} /> Send</>}
+                      </motion.button>
                     </div>
                   </div>
                 </div>
-              </>
-            )}
-
-            {/* ── Activity tab ── */}
-            {rightTab === 'activity' && (
-              <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-5 space-y-3">
-                {activityLog.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-48 text-slate-700">
-                    <Activity size={28} className="mb-2 opacity-30" />
-                    <p className="text-sm font-semibold">No activity yet</p>
-                    <p className="text-xs mt-1">Changes will appear here</p>
-                  </div>
-                ) : (
-                  activityLog.map(log => {
-                    const time = log.at?.toDate
-                      ? formatDistanceToNow(log.at.toDate(), { addSuffix: true })
-                      : '…';
-                    return (
-                      <div key={log.id} className="flex gap-3 items-start">
-                        <div className="w-6 h-6 rounded-full bg-dark-700 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
-                          <Zap size={10} className="text-primary-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-slate-400 leading-relaxed">{activityLabel(log)}</p>
-                          <p className="text-[10px] text-slate-700 mt-0.5">{time}</p>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
               </div>
-            )}
+            </div>
 
           </div>
         </motion.div>

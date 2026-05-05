@@ -20,7 +20,8 @@ export function useProjectTasks(projectId) {
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const tasksData = snapshot.docs.map(doc => ({
                 id: doc.id,
-                ...doc.data()
+                ...doc.data(),
+                _path: doc.ref.path,
             }));
             setTasks(tasksData);
             setLoading(false);
