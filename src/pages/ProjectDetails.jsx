@@ -196,6 +196,7 @@ export default function ProjectDetailsPage() {
             {/* Collaboration Sidebar */}
             <ProjectCollaborationSidebar
                 projectId={projectId}
+                projectTitle={project?.title}
                 isOpen={isSidebarOpen}
                 onClose={() => setIsSidebarOpen(false)}
             />

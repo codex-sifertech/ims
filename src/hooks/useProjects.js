@@ -56,6 +56,18 @@ export function useProjects() {
                 dueDate: projectData.dueDate || null,
                 timeLogged: 0
             });
+
+            // Auto-create a welcome message so the project chat channel is initialized
+            await addDoc(collection(db, 'companies', activeCompany.id, 'projects', docRef.id, 'chat'), {
+                text: `👋 Welcome to **${projectData.title || 'this project'}**! This is the dedicated chat channel for this project. Collaborate, share links, and mention tasks with #.`,
+                senderId: 'system',
+                senderName: 'System',
+                senderPhoto: null,
+                createdAt: serverTimestamp(),
+                type: 'text',
+                reactions: {},
+            });
+
             return docRef.id;
         } catch (error) {
             console.error("Error creating project:", error);

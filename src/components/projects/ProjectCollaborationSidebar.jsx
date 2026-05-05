@@ -1,73 +1,90 @@
 import { useState, useEffect, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../firebase';
 import useStore from '../../store/useStore';
-import { Send, Hash, FileText, Image as ImageIcon, HelpCircle, Code, X, ChevronRight, MessageSquare, Paperclip, Loader2, Settings, Anchor } from 'lucide-react';
+import {
+    Send, FileText, Image as ImageIcon, HelpCircle, X,
+    MessageSquare, Paperclip, Settings, Anchor, Users,
+    AlertTriangle, UploadCloud, ExternalLink, Trash2, Loader2
+} from 'lucide-react';
 import { format } from 'date-fns';
 
-export default function ProjectCollaborationSidebar({ projectId, isOpen, onClose }) {
+// ── File type icon / color ─────────────────────────────────────────────────
+function fileColor(ext = '') {
+    const e = ext.toLowerCase();
+    if (['pdf'].includes(e))                        return 'text-red-400 bg-red-500/10';
+    if (['doc', 'docx'].includes(e))               return 'text-blue-400 bg-blue-500/10';
+    if (['xls', 'xlsx', 'csv'].includes(e))        return 'text-emerald-400 bg-emerald-500/10';
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(e)) return 'text-pink-400 bg-pink-500/10';
+    if (['js', 'ts', 'jsx', 'tsx', 'json'].includes(e)) return 'text-amber-400 bg-amber-500/10';
+    if (['zip', 'rar', 'tar'].includes(e))         return 'text-purple-400 bg-purple-500/10';
+    return 'text-slate-400 bg-slate-500/10';
+}
+
+export default function ProjectCollaborationSidebar({ projectId, projectTitle, isOpen, onClose }) {
     const { user, projectNodes, activeCompany } = useStore();
-    const [activeTab, setActiveTab] = useState('chat'); // 'chat', 'code', 'help'
+    const [activeTab, setActiveTab] = useState('chat');
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [mentionFilter, setMentionFilter] = useState('');
     const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+
+    // Real files stored in Firestore
+    const [files, setFiles] = useState([]);
+    const [uploading, setUploading] = useState(false);
+
     const messagesEndRef = useRef(null);
-    const fileInputRef = useRef(null);
+    const fileInputRef   = useRef(null);
+    const fileUploadRef  = useRef(null);
 
-    const [mockFiles, setMockFiles] = useState([
-        { name: 'Architecture_Phase1.pdf', size: '2.4 MB', type: 'pdf', date: '2 days ago' },
-        { name: 'Main_Workflow.json', size: '156 KB', type: 'json', date: '5 hours ago' },
-        { name: 'Asset_Registry.xlsx', size: '1.1 MB', type: 'xlsx', date: 'Yesterday' },
-        { name: 'Core_Logic.js', size: '45 KB', type: 'js', date: '10 mins ago' },
-    ]);
-
-    // Sync messages
+    // ── Messages subscription ─────────────────────────────────────────────
     useEffect(() => {
-        if (!projectId || !user?.uid) return;
-
+        if (!projectId || !user?.uid || !activeCompany?.id) return;
         const messagesRef = collection(db, 'companies', activeCompany.id, 'projects', projectId, 'chat');
         const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(50));
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedMessages = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setMessages(fetchedMessages);
+        return onSnapshot(q, snap => {
+            setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
+    }, [projectId, user, activeCompany?.id]);
 
-        return () => unsubscribe();
-    }, [projectId, user]);
+    // ── Files subscription ────────────────────────────────────────────────
+    useEffect(() => {
+        if (!projectId || !activeCompany?.id) return;
+        const filesRef = collection(db, 'companies', activeCompany.id, 'projects', projectId, 'files');
+        const q = query(filesRef, orderBy('uploadedAt', 'desc'));
+        return onSnapshot(q, snap => {
+            setFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+    }, [projectId, activeCompany?.id]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isOpen]);
 
+    // ── Send message ──────────────────────────────────────────────────────
     const handleSendMessage = async (textToSend = null) => {
         const text = textToSend || newMessage;
         if (!text.trim() || !user?.uid) return;
-
         if (!textToSend) setNewMessage('');
-
         try {
             const messagesRef = collection(db, 'companies', activeCompany.id, 'projects', projectId, 'chat');
             await addDoc(messagesRef, {
                 text,
                 senderId: user.uid,
                 senderName: user.name || 'Team Member',
+                senderPhoto: user.photoURL || null,
                 createdAt: serverTimestamp(),
-                type: 'text'
+                type: 'text',
+                reactions: {},
             });
-        } catch (error) {
-            console.error("Error sending message:", error);
-        }
+        } catch (error) { console.error('Error sending message:', error); }
     };
 
+    // ── Mention suggestions ───────────────────────────────────────────────
     const handleInputChange = (e) => {
         const value = e.target.value;
         setNewMessage(value);
-
         const lastHash = value.lastIndexOf('#');
         if (lastHash !== -1 && (lastHash === 0 || value[lastHash - 1] === ' ')) {
             setShowMentionSuggestions(true);
@@ -85,267 +102,304 @@ export default function ProjectCollaborationSidebar({ projectId, isOpen, onClose
         setShowMentionSuggestions(false);
     };
 
-    const filteredNodes = projectNodes.filter(n => n.label.toLowerCase().includes(mentionFilter));
+    const filteredNodes = (projectNodes || []).filter(n => n.label?.toLowerCase().includes(mentionFilter));
+
+    // ── File upload (real Firebase Storage) ───────────────────────────────
+    const handleFileUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || !activeCompany?.id || !projectId) return;
+        setUploading(true);
+        try {
+            const path = `companies/${activeCompany.id}/projects/${projectId}/files/${Date.now()}_${file.name}`;
+            const sRef = storageRef(storage, path);
+            await uploadBytes(sRef, file);
+            const url = await getDownloadURL(sRef);
+
+            await addDoc(collection(db, 'companies', activeCompany.id, 'projects', projectId, 'files'), {
+                name: file.name,
+                size: file.size,
+                type: file.name.split('.').pop().toLowerCase(),
+                url,
+                storagePath: path,
+                uploadedBy: user.uid,
+                uploaderName: user.name || 'Team Member',
+                uploadedAt: serverTimestamp(),
+            });
+        } catch (err) { console.error('Upload failed:', err); }
+        setUploading(false);
+        // Reset input
+        if (fileUploadRef.current) fileUploadRef.current.value = '';
+    };
+
+    const formatSize = (bytes) => {
+        if (!bytes) return '';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    };
 
     const sendHelpSignal = () => {
-        handleSendMessage("🚨 HELP SIGNAL: Assistance requested in this project immediately!");
+        handleSendMessage('🚨 HELP SIGNAL: Assistance requested in this project immediately!');
         setActiveTab('chat');
     };
 
-    const handleFileUpload = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setMockFiles(prev => [{
-                name: file.name,
-                size: (file.size / 1024).toFixed(1) + ' KB',
-                type: file.name.split('.').pop(),
-                date: 'Just now'
-            }, ...prev]);
-        }
-    };
+    if (!isOpen) return null;
 
     return (
-        <div className={`fixed right-0 top-0 h-full bg-dark-900 border-l border-dark-700 shadow-2xl transition-all duration-300 z-[110] flex ${isOpen ? 'w-[450px]' : 'w-0'}`}>
-            {/* Sidebar Handle / Toggle when closed */}
-            {!isOpen && (
-                <div className="absolute -left-12 top-1/2 -translate-y-1/2 flex flex-col gap-2">
-                    <button 
-                        onClick={() => onClose()} // Parent should handle toggle
-                        className="w-12 h-12 bg-dark-800 border border-dark-600 rounded-l-xl flex items-center justify-center text-slate-400 hover:text-white transition-all shadow-xl"
-                    >
-                        <MessageSquare size={20} />
-                    </button>
-                </div>
-            )}
+        <div className="fixed right-0 top-0 h-full bg-dark-900 border-l border-dark-700 shadow-2xl z-[110] flex w-[450px]">
 
-            {/* Inner Tabs Sidebar */}
-            <div className="w-16 h-full bg-dark-950 border-r border-dark-800 flex flex-col items-center py-6 gap-6 shrink-0">
-                <div className="mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-indigo-600 flex items-center justify-center text-white font-black text-lg">I</div>
-                </div>
+            {/* ── Icon rail ── */}
+            <div className="w-14 h-full bg-dark-950 border-r border-dark-800 flex flex-col items-center py-5 gap-5 shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-indigo-600 flex items-center justify-center text-white font-black text-base">P</div>
 
-                <button 
-                    onClick={() => setActiveTab('chat')}
-                    title="Collaboration Chat"
-                    className={`p-3 rounded-xl transition-all relative ${activeTab === 'chat' ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20' : 'text-slate-500 hover:text-white hover:bg-dark-800'}`}
-                >
-                    <MessageSquare size={20} />
-                    <div className="absolute top-2 right-2 w-2 h-2 bg-emerald-500 rounded-full border-2 border-dark-950"></div>
+                <button onClick={() => setActiveTab('chat')} title="Chat"
+                    className={`p-2.5 rounded-xl transition-all relative ${activeTab === 'chat' ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20' : 'text-slate-500 hover:text-white hover:bg-dark-800'}`}>
+                    <MessageSquare size={18} />
+                    {messages.length > 0 && <div className="absolute top-1.5 right-1.5 w-2 h-2 bg-emerald-500 rounded-full border-2 border-dark-950" />}
                 </button>
-                <button 
-                    onClick={() => setActiveTab('code')}
-                    title="Project Repository"
-                    className={`p-3 rounded-xl transition-all ${activeTab === 'code' ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20' : 'text-slate-500 hover:text-white hover:bg-dark-800'}`}
-                >
-                    <FileText size={20} />
+
+                <button onClick={() => setActiveTab('files')} title="Files"
+                    className={`p-2.5 rounded-xl transition-all ${activeTab === 'files' ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20' : 'text-slate-500 hover:text-white hover:bg-dark-800'}`}>
+                    <FileText size={18} />
+                    {files.length > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 text-[8px] bg-primary-500 text-white rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                            {files.length > 9 ? '9+' : files.length}
+                        </span>
+                    )}
                 </button>
-                <button 
-                    onClick={() => setActiveTab('help')}
-                    title="Assistance & Sync"
-                    className={`p-3 rounded-xl transition-all ${activeTab === 'help' ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20' : 'text-slate-500 hover:text-white hover:bg-dark-800'}`}
-                >
-                    <HelpCircle size={20} />
+
+                <button onClick={() => setActiveTab('help')} title="Help"
+                    className={`p-2.5 rounded-xl transition-all ${activeTab === 'help' ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20' : 'text-slate-500 hover:text-white hover:bg-dark-800'}`}>
+                    <HelpCircle size={18} />
                 </button>
-                
-                <div className="mt-auto pb-4 flex flex-col gap-4">
-                    <button className="p-3 text-slate-500 hover:text-white transition-colors">
-                        <Settings size={20} />
+
+                <div className="mt-auto flex flex-col gap-4 pb-4">
+                    <button className="p-2.5 text-slate-500 hover:text-white transition-colors" title="Settings">
+                        <Settings size={18} />
                     </button>
-                    <button onClick={() => onClose()} className="p-3 text-slate-500 hover:text-red-400 transition-colors">
-                        <X size={20} />
+                    <button onClick={onClose} className="p-2.5 text-slate-500 hover:text-red-400 transition-colors" title="Close">
+                        <X size={18} />
                     </button>
                 </div>
             </div>
 
-            {/* Content Container */}
+            {/* ── Main content ── */}
             <div className="flex-1 flex flex-col bg-dark-900 overflow-hidden">
+
                 {/* Header */}
-                <header className="px-6 py-5 border-b border-dark-700 bg-dark-800/50 backdrop-blur shrink-0">
+                <header className="px-5 py-4 border-b border-dark-700 bg-dark-800/50 backdrop-blur shrink-0">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
-                            {activeTab === 'chat' && <><MessageSquare size={14} className="text-primary-500" /> Collaboration</>}
-                            {activeTab === 'code' && <><FileText size={14} className="text-primary-500" /> Repository</>}
-                            {activeTab === 'help' && <><Anchor size={14} className="text-primary-500" /> Support</>}
+                        <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                            {activeTab === 'chat'  && <><MessageSquare size={13} className="text-primary-400" /> {projectTitle || 'Project Chat'}</>}
+                            {activeTab === 'files' && <><FileText size={13} className="text-primary-400" /> Project Files</>}
+                            {activeTab === 'help'  && <><Anchor size={13} className="text-primary-400" /> Support</>}
                         </h3>
                         {activeTab === 'chat' && (
-                            <div className="flex -space-x-2">
-                                {[1,2,3].map(i => (
-                                    <div key={i} className="w-6 h-6 rounded-full border-2 border-dark-900 bg-dark-700 overflow-hidden">
-                                        <div className="w-full h-full bg-gradient-to-tr from-slate-600 to-slate-400"></div>
-                                    </div>
-                                ))}
-                                <div className="w-6 h-6 rounded-full border-2 border-dark-900 bg-emerald-500/20 flex items-center justify-center text-[8px] font-bold text-emerald-400">+2</div>
-                            </div>
+                            <span className="text-[10px] text-slate-500 font-medium">{messages.length} message{messages.length !== 1 ? 's' : ''}</span>
+                        )}
+                        {activeTab === 'files' && (
+                            <span className="text-[10px] text-slate-500 font-medium">{files.length} file{files.length !== 1 ? 's' : ''}</span>
                         )}
                     </div>
                 </header>
 
-                {/* Tab Specific Views */}
-                <div className="flex-1 overflow-hidden flex flex-col">
-                    {activeTab === 'chat' && (
-                        <>
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-dark-950/20">
-                                {messages.map((msg, idx) => {
-                                    const isMe = msg.senderId === user?.uid;
-                                    const isAlert = msg.text.includes('🚨');
+                {/* ── CHAT TAB ── */}
+                {activeTab === 'chat' && (
+                    <>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-dark-950/20">
+                            {messages.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-2 py-12">
+                                    <MessageSquare size={28} className="opacity-40" />
+                                    <p className="text-xs font-medium">No messages yet</p>
+                                    <p className="text-[10px]">Start the conversation!</p>
+                                </div>
+                            ) : messages.map(msg => {
+                                const isMe = msg.senderId === user?.uid;
+                                const isSystem = msg.senderId === 'system';
+                                const isAlert  = msg.text?.includes('🚨');
+                                return (
+                                    <div key={msg.id} className={`flex flex-col ${isMe && !isSystem ? 'items-end' : 'items-start'}`}>
+                                        <div className="flex items-center gap-2 mb-1 px-1">
+                                            <span className={`text-[10px] font-bold uppercase tracking-tighter ${isSystem ? 'text-primary-400' : 'text-slate-500'}`}>
+                                                {isMe && !isSystem ? 'You' : msg.senderName}
+                                            </span>
+                                            {msg.createdAt?.toDate && (
+                                                <span className="text-[9px] text-slate-600">{format(msg.createdAt.toDate(), 'HH:mm')}</span>
+                                            )}
+                                        </div>
+                                        <div className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed max-w-[90%] shadow-sm border ${
+                                            isAlert   ? 'bg-red-900/40 border-red-500/50 text-red-100 font-bold' :
+                                            isSystem  ? 'bg-primary-600/10 border-primary-500/20 text-primary-200 rounded-tl-sm italic' :
+                                            isMe      ? 'bg-primary-600 text-white border-primary-500 rounded-tr-none' :
+                                                        'bg-dark-800 text-slate-200 border-dark-700 rounded-tl-none'
+                                        }`}>
+                                            {msg.text?.split(/(#\w+)/).map((part, i) =>
+                                                part.startsWith('#')
+                                                    ? <span key={i} className="text-indigo-300 font-black underline cursor-pointer hover:text-indigo-100">{part}</span>
+                                                    : part
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div ref={messagesEndRef} />
+                        </div>
+
+                        <div className="p-4 bg-dark-900 border-t border-dark-700 relative shrink-0">
+                            {showMentionSuggestions && filteredNodes.length > 0 && (
+                                <div className="absolute left-4 bottom-full mb-2 w-[calc(100%-32px)] bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden z-20">
+                                    <div className="p-2 border-b border-dark-700 bg-dark-900/50">
+                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Link Project Nodes</span>
+                                    </div>
+                                    <div className="max-h-40 overflow-y-auto custom-scrollbar">
+                                        {filteredNodes.map(node => (
+                                            <button key={node.id} onClick={() => insertMention(node)}
+                                                className="w-full px-4 py-2.5 text-left text-xs hover:bg-primary-600/20 flex items-center gap-3 group transition-colors border-b border-dark-700/50 last:border-0">
+                                                <div className={`w-2 h-2 rounded-full ${node.type === 'mindmap' ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                                                <span className="text-slate-300 group-hover:text-white font-medium">{node.label}</span>
+                                                <span className="ml-auto text-[8px] text-slate-500 uppercase">{node.type}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="relative">
+                                <textarea
+                                    value={newMessage}
+                                    onChange={handleInputChange}
+                                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
+                                    placeholder="Type a message or # to link nodes…"
+                                    rows={2}
+                                    className="w-full bg-dark-800 border border-dark-700 rounded-2xl px-4 py-3 pb-12 text-sm text-white focus:outline-none focus:border-primary-500 transition-all resize-none shadow-inner custom-scrollbar"
+                                />
+                                <div className="absolute left-3 bottom-3 flex items-center gap-1">
+                                    <button type="button" onClick={() => fileInputRef.current?.click()}
+                                        className="p-2 text-slate-500 hover:text-primary-400 hover:bg-dark-700 rounded-lg transition-all" title="Attach file">
+                                        <Paperclip size={15} />
+                                    </button>
+                                    <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
+                                        // Send file as a chat message (quick share via file tab)
+                                        setActiveTab('files');
+                                        handleFileUpload(e);
+                                    }} />
+                                </div>
+                                <button type="submit" disabled={!newMessage.trim()}
+                                    className="absolute right-3 bottom-3 w-9 h-9 bg-primary-600 hover:bg-primary-500 text-white rounded-xl flex items-center justify-center transition-all disabled:opacity-40 shadow-lg shadow-primary-600/20">
+                                    <Send size={16} />
+                                </button>
+                            </form>
+                        </div>
+                    </>
+                )}
+
+                {/* ── FILES TAB ── */}
+                {activeTab === 'files' && (
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="p-4 bg-dark-800/50 border-b border-dark-700 flex items-center justify-between shrink-0">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Shared Files</span>
+                            <button
+                                onClick={() => fileUploadRef.current?.click()}
+                                disabled={uploading}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white rounded-lg text-[10px] font-bold transition-colors disabled:opacity-50">
+                                {uploading ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />}
+                                {uploading ? 'Uploading…' : 'Upload File'}
+                            </button>
+                            <input ref={fileUploadRef} type="file" className="hidden" onChange={handleFileUpload} />
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                            {files.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-3 py-12">
+                                    <UploadCloud size={32} className="opacity-30" />
+                                    <p className="text-xs font-medium text-center">No files uploaded yet</p>
+                                    <p className="text-[10px] text-center">Click "Upload File" to share files with your team</p>
+                                    <button
+                                        onClick={() => fileUploadRef.current?.click()}
+                                        disabled={uploading}
+                                        className="mt-2 px-4 py-2 bg-primary-600/20 hover:bg-primary-600 text-primary-400 hover:text-white border border-primary-500/30 hover:border-primary-500 rounded-xl text-xs font-bold transition-all">
+                                        Upload your first file
+                                    </button>
+                                </div>
+                            ) : (
+                                files.map(file => {
+                                    const colorCls = fileColor(file.type);
                                     return (
-                                        <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                                            <div className="flex items-center gap-2 mb-1 px-1">
-                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{isMe ? 'You' : msg.senderName}</span>
-                                                <span className="text-[9px] text-slate-600">{msg.createdAt ? format(msg.createdAt.toDate(), 'HH:mm') : '...'}</span>
-                                            </div>
-                                            <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed max-w-[90%] shadow-lg border ${
-                                                isAlert ? 'bg-red-900/40 border-red-500/50 text-red-100 font-bold' :
-                                                isMe ? 'bg-primary-600 text-white border-primary-500 rounded-tr-none' : 
-                                                'bg-dark-800 text-slate-200 border-dark-700 rounded-tl-none'
-                                            }`}>
-                                                {msg.text.split(/(#\w+)/).map((part, i) => 
-                                                    part.startsWith('#') ? <span key={i} className="text-indigo-300 font-black underline cursor-pointer hover:text-indigo-100">{part}</span> : part
+                                        <div key={file.id} className="p-3 bg-dark-800 border border-dark-700 hover:border-dark-600 rounded-xl transition-all group cursor-pointer">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${colorCls}`}>
+                                                    <FileText size={18} />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="text-xs font-bold text-white truncate">{file.name}</h4>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-[9px] text-slate-500 uppercase font-bold">{file.type}</span>
+                                                        {file.size && <><span className="w-1 h-1 rounded-full bg-slate-700" /><span className="text-[9px] text-slate-500">{formatSize(file.size)}</span></>}
+                                                        {file.uploaderName && <><span className="w-1 h-1 rounded-full bg-slate-700" /><span className="text-[9px] text-slate-500">{file.uploaderName}</span></>}
+                                                    </div>
+                                                </div>
+                                                {file.url && (
+                                                    <a href={file.url} target="_blank" rel="noreferrer"
+                                                        className="p-1.5 text-slate-500 hover:text-primary-400 hover:bg-dark-700 opacity-0 group-hover:opacity-100 rounded-lg transition-all" title="Open file">
+                                                        <ExternalLink size={13} />
+                                                    </a>
                                                 )}
                                             </div>
                                         </div>
                                     );
-                                })}
-                                <div ref={messagesEndRef} />
-                            </div>
-
-                            <div className="p-4 bg-dark-900 border-t border-dark-700 relative">
-                                {showMentionSuggestions && filteredNodes.length > 0 && (
-                                    <div className="absolute left-4 bottom-full mb-2 w-[calc(100%-32px)] bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden z-20">
-                                        <div className="p-2 border-b border-dark-700 bg-dark-900/50">
-                                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Link Project Nodes</span>
-                                        </div>
-                                        <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                                            {filteredNodes.map(node => (
-                                                <button 
-                                                    key={node.id}
-                                                    onClick={() => insertMention(node)}
-                                                    className="w-full px-4 py-2.5 text-left text-xs hover:bg-primary-600/20 flex items-center gap-3 group transition-colors border-b border-dark-700/50 last:border-0"
-                                                >
-                                                    <div className={`w-2 h-2 rounded-full ${node.type === 'mindmap' ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
-                                                    <span className="text-slate-300 group-hover:text-white font-medium">{node.label}</span>
-                                                    <span className="ml-auto text-[8px] text-slate-500 uppercase">{node.type}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="relative">
-                                    <textarea 
-                                        value={newMessage}
-                                        onChange={handleInputChange}
-                                        placeholder="Type message or use # to link nodes..."
-                                        rows={2}
-                                        className="w-full bg-dark-800 border border-dark-700 rounded-2xl px-4 py-3 pb-12 text-sm text-white focus:outline-none focus:border-primary-500 transition-all resize-none shadow-inner custom-scrollbar"
-                                    />
-                                    <div className="absolute left-3 bottom-3 flex items-center gap-1">
-                                        <button 
-                                            type="button" 
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="p-2 text-slate-500 hover:text-primary-400 hover:bg-dark-700 rounded-lg transition-all"
-                                        >
-                                            <Paperclip size={16} />
-                                        </button>
-                                        <button 
-                                            type="button" 
-                                            className="p-2 text-slate-500 hover:text-primary-400 hover:bg-dark-700 rounded-lg transition-all"
-                                        >
-                                            <ImageIcon size={16} />
-                                        </button>
-                                    </div>
-                                    <button 
-                                        type="submit"
-                                        disabled={!newMessage.trim()}
-                                        className="absolute right-3 bottom-3 w-10 h-10 bg-primary-600 hover:bg-primary-500 text-white rounded-xl flex items-center justify-center transition-all disabled:opacity-50 disabled:grayscale shadow-lg shadow-primary-600/20"
-                                    >
-                                        <Send size={18} />
-                                    </button>
-                                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
-                                </form>
-                            </div>
-                        </>
-                    )}
-
-                    {activeTab === 'code' && (
-                        <div className="flex-1 flex flex-col overflow-hidden">
-                            <div className="p-4 bg-dark-800/50 border-b border-dark-700 flex items-center justify-between">
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Active Store</span>
-                                <button 
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-[10px] font-bold hover:bg-primary-500 transition-colors"
-                                >
-                                    Upload File
-                                </button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                                {mockFiles.map((file, i) => (
-                                    <div key={i} className="p-3 bg-dark-800 border border-dark-700 rounded-xl hover:border-slate-600 transition-all group cursor-pointer shadow-sm">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-dark-900 rounded-lg flex items-center justify-center text-primary-500 group-hover:scale-110 transition-transform">
-                                                <FileText size={20} />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className="text-xs font-bold text-white truncate">{file.name}</h4>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="text-[9px] text-slate-500">{file.size}</span>
-                                                    <span className="w-1 h-1 rounded-full bg-slate-700"></span>
-                                                    <span className="text-[9px] text-slate-500">{file.date}</span>
-                                                </div>
-                                            </div>
-                                            <button className="p-2 text-slate-500 hover:text-white opacity-0 group-hover:opacity-100 transition-all">
-                                                <Paperclip size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                                })
+                            )}
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {activeTab === 'help' && (
-                        <div className="flex-1 p-6 space-y-6 overflow-y-auto custom-scrollbar">
-                            <section className="bg-red-900/10 border border-red-500/20 p-5 rounded-2xl relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 blur-3xl -mr-10 -mt-10"></div>
-                                <h4 className="text-sm font-bold text-red-400 mb-2 flex items-center gap-2">
-                                    <Activity size={16} /> Urgent Assistance
-                                </h4>
-                                <p className="text-xs text-slate-400 leading-relaxed mb-6">
-                                    Sending a help signal will notify all active members of this project and trigger a global notification.
-                                </p>
-                                <button 
-                                    onClick={sendHelpSignal}
-                                    className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-red-600/20 active:scale-[0.98]"
-                                >
-                                    Broadcast Help Signal
-                                </button>
-                            </section>
+                {/* ── HELP TAB ── */}
+                {activeTab === 'help' && (
+                    <div className="flex-1 p-5 space-y-5 overflow-y-auto custom-scrollbar">
+                        {/* Help signal */}
+                        <section className="bg-red-900/10 border border-red-500/20 p-5 rounded-2xl">
+                            <h4 className="text-sm font-bold text-red-400 mb-2 flex items-center gap-2">
+                                <AlertTriangle size={15} /> Urgent Assistance
+                            </h4>
+                            <p className="text-xs text-slate-400 leading-relaxed mb-5">
+                                Send a help signal to notify all active members of this project immediately.
+                            </p>
+                            <button onClick={sendHelpSignal}
+                                className="w-full py-3 bg-red-600 hover:bg-red-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-red-600/20 active:scale-[0.98]">
+                                🚨 Broadcast Help Signal
+                            </button>
+                        </section>
 
-                            <section className="bg-primary-900/10 border border-primary-500/20 p-5 rounded-2xl">
-                                <h4 className="text-sm font-bold text-primary-400 mb-4 flex items-center gap-2">
-                                    <Users size={16} /> Live Collaboration
-                                </h4>
-                                <div className="space-y-4">
-                                    <div className="p-4 bg-dark-800/80 rounded-xl border border-dark-700">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase">Live Rooms</span>
-                                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[8px] font-bold border border-emerald-500/20">Active</span>
-                                        </div>
-                                        <p className="text-xs text-white font-medium mb-3 truncate">Product Design Review</p>
-                                        <button className="w-full py-2 bg-primary-600/20 hover:bg-primary-600 text-primary-400 hover:text-white text-[10px] font-bold rounded-lg transition-all border border-primary-500/30">
-                                            Join Meeting
-                                        </button>
-                                    </div>
-                                    <button className="w-full py-3 bg-dark-800 hover:bg-dark-700 border border-dark-700 text-slate-300 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all">
-                                        Schedule Sync
-                                    </button>
-                                </div>
-                            </section>
-                        </div>
-                    )}
-                </div>
+                        {/* Team */}
+                        <section className="bg-primary-900/10 border border-primary-500/20 p-5 rounded-2xl">
+                            <h4 className="text-sm font-bold text-primary-400 mb-3 flex items-center gap-2">
+                                <Users size={15} /> Team Collaboration
+                            </h4>
+                            <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                                Use the chat to coordinate with your team. Mention tasks with # and team members with @.
+                            </p>
+                            <button onClick={() => setActiveTab('chat')}
+                                className="w-full py-2.5 bg-primary-600/20 hover:bg-primary-600 text-primary-400 hover:text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-primary-500/30">
+                                Go to Chat
+                            </button>
+                        </section>
+
+                        {/* File sharing */}
+                        <section className="bg-dark-800/50 border border-dark-700 p-5 rounded-2xl">
+                            <h4 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+                                <FileText size={15} className="text-slate-400" /> File Sharing
+                            </h4>
+                            <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                                Upload and share files directly with your team. All files are stored securely.
+                            </p>
+                            <button onClick={() => setActiveTab('files')}
+                                className="w-full py-2.5 bg-dark-700 hover:bg-dark-600 text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-dark-600">
+                                View Files
+                            </button>
+                        </section>
+                    </div>
+                )}
             </div>
         </div>
     );
 }
-
