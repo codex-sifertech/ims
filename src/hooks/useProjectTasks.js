@@ -37,15 +37,29 @@ export function useProjectTasks(projectId) {
         if (!user?.uid || !activeCompany?.id || !projectId) return;
 
         try {
+            const { pendingSubtasks, ...rest } = taskData;
             const tasksRef = collection(db, 'companies', activeCompany.id, 'projects', projectId, 'tasks');
-            await addDoc(tasksRef, {
-                ...taskData,
+            const docRef = await addDoc(tasksRef, {
+                ...rest,
                 companyId: activeCompany.id,
                 projectId,
                 createdBy: user.name || 'Unknown',
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
             });
+            // Save pending subtasks to subcollection
+            if (pendingSubtasks?.length > 0) {
+                const subtasksCol = collection(docRef, 'subtasks');
+                for (const st of pendingSubtasks) {
+                    await addDoc(subtasksCol, {
+                        title: st.title,
+                        done: st.done || false,
+                        createdBy: user.uid,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                    });
+                }
+            }
         } catch (error) {
             console.error("Error adding task:", error);
             throw error;

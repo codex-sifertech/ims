@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, MonitorPlay, Settings, Network, ListTree,
     MessageSquare, Sparkles, Loader2, AlertCircle,
-    FileText, BarChart2, CheckSquare, ChevronRight
+    FileText, BarChart2, CheckSquare, ChevronRight, Paperclip
 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { useProject } from '../hooks/useProject';
@@ -16,6 +16,7 @@ import ProjectInternalKanban from '../components/projects/ProjectInternalKanban'
 import ProjectOverview from '../components/projects/ProjectOverview';
 import ProjectSettings from '../components/projects/ProjectSettings';
 import ProjectDetails from '../components/projects/ProjectDetails';
+import ProjectDocuments from '../components/projects/ProjectDocuments';
 
 export default function ProjectDetailsPage() {
     const { projectId } = useParams();
@@ -59,10 +60,11 @@ export default function ProjectDetailsPage() {
     };
 
     const mainTabs = [
-        { id: 'details',   label: 'Details',   icon: <FileText size={15} /> },
-        { id: 'analytics', label: 'Analytics', icon: <BarChart2 size={15} /> },
-        { id: 'tasks',     label: 'Tasks',     icon: <CheckSquare size={15} /> },
-        { id: 'tools',     label: 'Tools',     icon: <Network size={15} /> },
+        { id: 'details',   label: 'Details',    icon: <FileText size={15} /> },
+        { id: 'documents', label: 'Documents',  icon: <Paperclip size={15} /> },
+        { id: 'analytics', label: 'Analytics',  icon: <BarChart2 size={15} /> },
+        { id: 'tasks',     label: 'Tasks',      icon: <CheckSquare size={15} /> },
+        { id: 'tools',     label: 'Tools',      icon: <Network size={15} /> },
     ];
 
     const toolTabs = [
@@ -147,6 +149,9 @@ export default function ProjectDetailsPage() {
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {activeView === 'details' && (
                         <ProjectDetails project={project} onUpdate={updateProjectData} />
+                    )}
+                    {activeView === 'documents' && (
+                        <ProjectDocuments projectId={projectId} />
                     )}
                     {activeView === 'analytics' && (
                         <div className="p-6">
