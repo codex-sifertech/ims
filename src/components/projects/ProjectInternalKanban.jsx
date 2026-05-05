@@ -163,6 +163,7 @@ export default function ProjectInternalKanban({ projectId }) {
                     members={[]}
                     onClose={() => setSelectedTask(null)}
                     onUpdate={(updates) => setSelectedTask(t => ({ ...t, ...updates }))}
+                    onDelete={() => { setSelectedTask(null); }}
                     onCreate={async (taskData) => {
                         try {
                             await addTask({

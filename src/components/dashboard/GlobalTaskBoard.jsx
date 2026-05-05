@@ -300,6 +300,7 @@ export default function GlobalTaskBoard() {
                     members={members}
                     onClose={() => setSelectedTask(null)}
                     onUpdate={(updates) => setSelectedTask(t => ({ ...t, ...updates }))}
+                    onDelete={() => { setSelectedTask(null); }}
                     onCreate={async (taskData) => {
                         await addTaskToCompany({
                             ...taskData,
