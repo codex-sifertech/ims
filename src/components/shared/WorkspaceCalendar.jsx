@@ -1,99 +1,92 @@
 import { useState, useEffect, useCallback } from 'react';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
 import useStore from '../../store/useStore';
-import { CalendarDays, Loader2, Settings, ArrowRight } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { CalendarDays, Loader2 } from 'lucide-react';
 import { createWorkspaceCalendar } from '../../utils/workspaceCalendar';
 
 export default function WorkspaceCalendar() {
     const { activeCompany, user } = useStore();
-    const navigate = useNavigate();
-    const [savedId, setSavedId] = useState('');
+    const [calendarId, setCalendarId] = useState('');
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
-    const [hasToken, setHasToken] = useState(null);
 
+    // Listen to the company document for calendarId changes
     useEffect(() => {
         if (!activeCompany?.id) return;
         const ref = doc(db, 'companies', activeCompany.id);
-        const unsub = onSnapshot(ref, (snap) => {
-            setSavedId(snap.data()?.calendarId || '');
-            setLoading(false);
-        }, () => setLoading(false));
+        const unsub = onSnapshot(
+            ref,
+            (snap) => {
+                setCalendarId(snap.data()?.calendarId || '');
+                setLoading(false);
+            },
+            () => setLoading(false)
+        );
         return () => unsub();
     }, [activeCompany?.id]);
 
-    useEffect(() => {
-        if (!user?.uid) return;
-        const ref = doc(db, 'users', user.uid, 'integrations', 'google_calendar');
-        getDoc(ref).then(snap => {
-            const data = snap.data();
-            setHasToken(!!(data?.accessToken && (!data.expiresAt || Date.now() < data.expiresAt)));
-        }).catch(() => setHasToken(false));
-    }, [user?.uid]);
-
+    // Auto-create the workspace calendar when none exists yet
     const autoCreate = useCallback(async () => {
         if (!activeCompany?.id || !user?.uid || creating) return;
         setCreating(true);
         try {
-            const calId = await createWorkspaceCalendar(user.uid, activeCompany.name || 'Workspace', activeCompany.id);
-            if (calId) setSavedId(calId);
-        } catch {}
+            await createWorkspaceCalendar(
+                user.uid,
+                activeCompany.name || 'Workspace',
+                activeCompany.id
+            );
+            // calendarId will update via the onSnapshot listener above
+        } catch (err) {
+            console.error('Auto-create calendar failed:', err);
+        }
         setCreating(false);
     }, [activeCompany?.id, activeCompany?.name, user?.uid, creating]);
 
-    // Auto-create when connected but no calendar yet
+    // Trigger auto-create once we know there is no calendar yet
     useEffect(() => {
-        if (!loading && !savedId && hasToken === true && !creating) {
+        if (!loading && !calendarId && !creating && activeCompany?.id) {
             autoCreate();
         }
-    }, [loading, savedId, hasToken, creating, autoCreate]);
+    }, [loading, calendarId, creating, activeCompany?.id, autoCreate]);
 
-    if (loading || (hasToken === true && !savedId && !creating)) {
+    // Loading / creating states
+    if (loading || creating || (!calendarId && !loading)) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500">
                 <Loader2 size={24} className="animate-spin text-primary-500" />
-                <p className="text-xs font-semibold uppercase tracking-widest">Loading calendar...</p>
+                <p className="text-xs font-semibold uppercase tracking-widest">
+                    {creating ? 'Setting up workspace calendar…' : 'Loading calendar…'}
+                </p>
+                {creating && (
+                    <p className="text-[11px] text-slate-600">
+                        Creating a dedicated Google Calendar for this workspace
+                    </p>
+                )}
             </div>
         );
     }
 
-    if (creating) {
-        return (
-            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500">
-                <Loader2 size={24} className="animate-spin text-primary-500" />
-                <p className="text-xs font-semibold uppercase tracking-widest">Setting up workspace calendar...</p>
-                <p className="text-[11px] text-slate-600">Creating a dedicated Google Calendar for this workspace</p>
-            </div>
-        );
-    }
-
-    if (!savedId) {
+    // No calendarId after create attempt — show a simple fallback
+    if (!calendarId) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8">
                 <div className="w-16 h-16 rounded-2xl bg-primary-500/10 border border-primary-500/20 flex items-center justify-center">
                     <CalendarDays size={28} className="text-primary-400" />
                 </div>
                 <div className="text-center max-w-sm">
-                    <h3 className="text-lg font-bold text-white mb-2">Connect Google Calendar</h3>
+                    <h3 className="text-lg font-bold text-white mb-2">Calendar Unavailable</h3>
                     <p className="text-sm text-slate-400 leading-relaxed">
-                        Connect your Google Calendar in workspace settings to automatically create a shared calendar for your team.
+                        The workspace calendar could not be created. Please check that the IMS
+                        service account is configured correctly and try again from Settings.
                     </p>
                 </div>
-                <button
-                    onClick={() => navigate('/dashboard/settings')}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold rounded-xl transition-colors"
-                >
-                    <Settings size={16} />
-                    Go to Settings
-                    <ArrowRight size={14} />
-                </button>
             </div>
         );
     }
 
-    let cleanId = savedId.trim();
+    // Build embed URL
+    let cleanId = calendarId.trim();
     if (cleanId.includes('src=')) {
         try {
             const match = cleanId.match(/src=([^&"]+)/);

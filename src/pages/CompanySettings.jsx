@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
-import { Shield, UserPlus, Loader2, Trash2, Mail, Plug, CalendarDays, CheckCircle2, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
-import GoogleCalendarConnect from '../components/shared/GoogleCalendarConnect';
+import { Shield, UserPlus, Loader2, Trash2, Mail, Plug, CalendarDays, CheckCircle2, RefreshCw, AlertTriangle, ExternalLink, Bot } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createWorkspaceCalendar } from '../utils/workspaceCalendar';
 
@@ -17,7 +16,6 @@ export default function CompanySettings() {
     const [inviteError, setInviteError] = useState('');
 
     const [calendarId, setCalendarId] = useState(activeCompany?.calendarId || '');
-    const [hasToken, setHasToken] = useState(null);
     const [recreating, setRecreating] = useState(false);
 
     const isCompanyOwner = activeCompany?.owner === user?.uid || members.find(m => m.id === user?.uid)?.role === 'owner';
@@ -50,15 +48,6 @@ export default function CompanySettings() {
         });
         return () => unsub();
     }, [activeCompany?.id]);
-
-    // Check if Google Calendar token exists
-    useEffect(() => {
-        if (!user?.uid) return;
-        getDoc(doc(db, 'users', user.uid, 'integrations', 'google_calendar')).then(snap => {
-            const data = snap.data();
-            setHasToken(!!(data?.accessToken && (!data.expiresAt || Date.now() < data.expiresAt)));
-        }).catch(() => setHasToken(false));
-    }, [user?.uid]);
 
     const handleRecreateCalendar = useCallback(async () => {
         if (!activeCompany?.id || !user?.uid || recreating) return;
@@ -362,22 +351,25 @@ export default function CompanySettings() {
                     </div>
                 </div>
 
-                {/* ── Google Calendar Row ── */}
+                {/* ── Service Account Info Row ── */}
                 <div className="p-6 border-b border-dark-700/50">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
-                                <CalendarDays size={18} className="text-blue-400" />
+                            <div className="w-10 h-10 rounded-xl bg-primary-500/10 border border-primary-500/20 flex items-center justify-center shrink-0">
+                                <Bot size={18} className="text-primary-400" />
                             </div>
                             <div>
                                 <p className="text-sm font-bold text-white">Google Calendar</p>
                                 <p className="text-xs text-slate-500 mt-0.5">
-                                    Connect your personal Google account to auto-create and sync workspace calendars.
+                                    Powered by IMS Service Account — no personal Google connection needed.
                                 </p>
                             </div>
                         </div>
                         <div className="shrink-0">
-                            <GoogleCalendarConnect onConnectionChange={setHasToken} />
+                            <div className="flex items-center gap-2 px-4 py-2 bg-primary-500/10 border border-primary-500/20 rounded-xl text-primary-400 text-xs font-black uppercase tracking-widest">
+                                <Bot size={13} />
+                                Managed by IMS Bot
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -412,11 +404,7 @@ export default function CompanySettings() {
                                     </div>
                                 ) : (
                                     <p className="text-xs text-amber-400/80 mt-0.5">
-                                        {hasToken === false
-                                            ? 'Connect Google Calendar above to create a workspace calendar.'
-                                            : hasToken === null
-                                            ? 'Checking connection...'
-                                            : 'No workspace calendar yet. Click to auto-create.'}
+                                        No workspace calendar yet. Click to auto-create via IMS bot.
                                     </p>
                                 )}
                                 {calendarId && (
@@ -425,7 +413,7 @@ export default function CompanySettings() {
                             </div>
                         </div>
 
-                        {hasToken === true && isCompanyAdmin && (
+                        {isCompanyAdmin && (
                             <button
                                 onClick={handleRecreateCalendar}
                                 disabled={recreating}

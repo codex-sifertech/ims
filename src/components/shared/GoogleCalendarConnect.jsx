@@ -1,10 +1,15 @@
+/**
+ * @deprecated This component is no longer used in the UI.
+ * Google Calendar is now managed by the IMS Service Account via Firebase Cloud Functions.
+ * Per-user OAuth is no longer required. See src/utils/workspaceCalendar.js and functions/index.js.
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import useStore from '../../store/useStore';
 import { CheckCircle2, Calendar, Loader2, ExternalLink } from 'lucide-react';
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '791274596080-bv0l4otccm3hkm0utcu42u9cchavfqpj.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 // Full calendar scope — needed to create workspace calendars and manage ACLs
 const SCOPES = 'https://www.googleapis.com/auth/calendar';
 
