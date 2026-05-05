@@ -47,7 +47,7 @@ export default function DashboardLayout() {
         ] : [
             { name: 'Workspace Details', path: '/dashboard/settings', icon: <Settings size={20} /> }
         ]),
-        ...(user?.role === 'master_admin' ? [{ name: 'Super Admin', path: '/dashboard/admin', icon: <Shield size={20} />, danger: true }] : []),
+        ...(user?.role === 'master_admin' ? [{ name: 'Super Admin', path: '/domain/admin', icon: <Shield size={20} />, danger: true }] : []),
     ];
 
     const isDashboardActive = location.pathname === '/dashboard';

@@ -270,5 +270,14 @@ service cloud.firestore {
     match /adminLogs/{logId} {
       allow read, write: if isMasterAdmin();
     }
+
+    // ── System (global config / calendar token) ────────────────────────────────
+    // All authenticated users can read (needed to fetch calendar token for API
+    // calls). Only the master admin can write (stores OAuth token here).
+
+    match /system/{docId} {
+      allow read: if isAuth();
+      allow write: if isMasterAdmin();
+    }
   }
 }

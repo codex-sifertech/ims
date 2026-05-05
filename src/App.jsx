@@ -20,6 +20,7 @@ import Meetings from './pages/Meetings';
 import CompanySelection from './pages/CompanySelection';
 import CompanySettings from './pages/CompanySettings';
 import AdminPanel from './pages/AdminPanel';
+import MasterAdmin from './pages/MasterAdmin';
 import PeopleHR from './pages/PeopleHR';
 import MemberDetails from './pages/MemberDetails';
 import GlobalFloatingStream from './components/shared/GlobalFloatingStream';
@@ -38,6 +39,16 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" />;
   }
 
+  return children;
+}
+
+function MasterAdminRoute({ children }) {
+  const { user, isLoading } = useStore();
+  if (isLoading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" />;
+  if (user.email !== 'sifertech.co@gmail.com' && user.role !== 'master_admin') {
+    return <Navigate to="/dashboard" />;
+  }
   return children;
 }
 
@@ -199,6 +210,13 @@ function App() {
           <Route path="settings" element={<CompanySettings />} />
           <Route path="admin" element={<AdminPanel />} />
         </Route>
+
+        {/* Master Admin Route — /domain/admin */}
+        <Route path="/domain/admin" element={
+          <MasterAdminRoute>
+            <MasterAdmin />
+          </MasterAdminRoute>
+        } />
 
         {/* Catch-all redirect */}
         <Route path="*" element={<Navigate to="/" />} />
