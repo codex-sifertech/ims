@@ -1,118 +1,94 @@
-import { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { useState, useEffect, useCallback } from 'react';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
 import useStore from '../../store/useStore';
-import { CalendarDays, Settings, Save, Check, ExternalLink, Loader2 } from 'lucide-react';
+import { CalendarDays, Loader2, Settings, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { createWorkspaceCalendar } from '../../utils/workspaceCalendar';
 
 export default function WorkspaceCalendar() {
     const { activeCompany, user } = useStore();
-    const [calendarId, setCalendarId] = useState('');
+    const navigate = useNavigate();
     const [savedId, setSavedId] = useState('');
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [justSaved, setJustSaved] = useState(false);
-    const [autoCreating, setAutoCreating] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [hasToken, setHasToken] = useState(null);
 
     useEffect(() => {
         if (!activeCompany?.id) return;
         const ref = doc(db, 'companies', activeCompany.id);
         const unsub = onSnapshot(ref, (snap) => {
-            const id = snap.data()?.calendarId || '';
-            setCalendarId(id);
-            setSavedId(id);
+            setSavedId(snap.data()?.calendarId || '');
             setLoading(false);
         }, () => setLoading(false));
         return () => unsub();
     }, [activeCompany?.id]);
 
-    const handleSave = async () => {
-        if (!activeCompany?.id || saving) return;
-        setSaving(true);
-        try {
-            await setDoc(doc(db, 'companies', activeCompany.id), { calendarId: calendarId.trim() }, { merge: true });
-            setSavedId(calendarId.trim());
-            setJustSaved(true);
-            setTimeout(() => setJustSaved(false), 2000);
-        } catch (e) { console.error('Failed to save calendar ID:', e); }
-        setSaving(false);
-    };
+    useEffect(() => {
+        if (!user?.uid) return;
+        const ref = doc(db, 'users', user.uid, 'integrations', 'google_calendar');
+        getDoc(ref).then(snap => {
+            const data = snap.data();
+            setHasToken(!!(data?.accessToken && (!data.expiresAt || Date.now() < data.expiresAt)));
+        }).catch(() => setHasToken(false));
+    }, [user?.uid]);
 
-    const handleAutoCreate = async () => {
-        if (!activeCompany?.id || !user?.uid || autoCreating) return;
-        setAutoCreating(true);
+    const autoCreate = useCallback(async () => {
+        if (!activeCompany?.id || !user?.uid || creating) return;
+        setCreating(true);
         try {
             const calId = await createWorkspaceCalendar(user.uid, activeCompany.name || 'Workspace', activeCompany.id);
-            if (calId) {
-                setCalendarId(calId);
-                setSavedId(calId);
-            } else {
-                alert('Could not create calendar. Make sure your Google Calendar is connected in My Board settings.');
-            }
-        } catch {
-            alert('Calendar creation failed. Please connect Google Calendar first.');
-        } finally {
-            setAutoCreating(false);
+            if (calId) setSavedId(calId);
+        } catch {}
+        setCreating(false);
+    }, [activeCompany?.id, activeCompany?.name, user?.uid, creating]);
+
+    // Auto-create when connected but no calendar yet
+    useEffect(() => {
+        if (!loading && !savedId && hasToken === true && !creating) {
+            autoCreate();
         }
-    };
+    }, [loading, savedId, hasToken, creating, autoCreate]);
 
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-    if (loading) {
+    if (loading || (hasToken === true && !savedId && !creating)) {
         return (
-            <div className="flex-1 flex items-center justify-center text-slate-500 text-sm gap-2">
-                <Loader2 size={16} className="animate-spin" /> Loading calendar...
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500">
+                <Loader2 size={24} className="animate-spin text-primary-500" />
+                <p className="text-xs font-semibold uppercase tracking-widest">Loading calendar...</p>
+            </div>
+        );
+    }
+
+    if (creating) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500">
+                <Loader2 size={24} className="animate-spin text-primary-500" />
+                <p className="text-xs font-semibold uppercase tracking-widest">Setting up workspace calendar...</p>
+                <p className="text-[11px] text-slate-600">Creating a dedicated Google Calendar for this workspace</p>
             </div>
         );
     }
 
     if (!savedId) {
         return (
-            <div className="flex-1 m-6 flex flex-col items-center justify-center gap-4">
-                <div className="w-20 h-20 bg-dark-800 rounded-full flex items-center justify-center border border-dark-700">
-                    <CalendarDays size={36} className="text-slate-600" />
+            <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8">
+                <div className="w-16 h-16 rounded-2xl bg-primary-500/10 border border-primary-500/20 flex items-center justify-center">
+                    <CalendarDays size={28} className="text-primary-400" />
                 </div>
-                <h3 className="text-lg font-black text-white">Workspace Calendar</h3>
-                <p className="text-slate-500 text-sm max-w-md text-center">
-                    Auto-create a shared Google Calendar for this workspace, or enter an existing Calendar ID manually.
-                </p>
-
-                <button
-                    onClick={handleAutoCreate}
-                    disabled={autoCreating}
-                    className="flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-primary-500/20"
-                >
-                    {autoCreating ? <Loader2 size={16} className="animate-spin" /> : <CalendarDays size={16} />}
-                    {autoCreating ? 'Creating Calendar...' : 'Auto-Create Calendar'}
-                </button>
-
-                <div className="flex items-center gap-3 w-full max-w-md">
-                    <div className="flex-1 h-px bg-dark-700" />
-                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">or enter manually</span>
-                    <div className="flex-1 h-px bg-dark-700" />
-                </div>
-
-                <div className="flex flex-col gap-3 w-full max-w-md">
-                    <input
-                        value={calendarId}
-                        onChange={e => setCalendarId(e.target.value)}
-                        placeholder="e.g. your-email@gmail.com or calendar-id@group.calendar.google.com"
-                        className="w-full bg-dark-800 border border-dark-600 focus:border-primary-500 rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600"
-                    />
-                    <div className="flex gap-2">
-                        <button onClick={handleSave} disabled={!calendarId.trim() || saving}
-                            className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-dark-700 hover:bg-dark-600 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-colors border border-dark-600">
-                            <Save size={16} /> Save Calendar ID
-                        </button>
-                        <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-4 py-3 bg-dark-800 hover:bg-dark-700 text-slate-400 text-sm font-bold rounded-xl transition-colors border border-dark-700">
-                            <ExternalLink size={14} /> Open Settings
-                        </a>
-                    </div>
-                    <p className="text-[10px] text-slate-600 text-center">
-                        If entering manually, make sure the calendar is set to <strong className="text-slate-400">public</strong> for the embed to work.
+                <div className="text-center max-w-sm">
+                    <h3 className="text-lg font-bold text-white mb-2">Connect Google Calendar</h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                        Connect your Google Calendar in workspace settings to automatically create a shared calendar for your team.
                     </p>
                 </div>
+                <button
+                    onClick={() => navigate('/dashboard/settings')}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold rounded-xl transition-colors"
+                >
+                    <Settings size={16} />
+                    Go to Settings
+                    <ArrowRight size={14} />
+                </button>
             </div>
         );
     }
@@ -121,33 +97,22 @@ export default function WorkspaceCalendar() {
     if (cleanId.includes('src=')) {
         try {
             const match = cleanId.match(/src=([^&"]+)/);
-            if (match && match[1]) cleanId = decodeURIComponent(match[1]);
+            if (match?.[1]) cleanId = decodeURIComponent(match[1]);
         } catch {}
     }
 
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const embedUrl = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(cleanId)}&ctz=${encodeURIComponent(tz || 'UTC')}&mode=WEEK`;
 
     return (
         <div className="flex-1 flex flex-col h-full">
-            <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-dark-800/50 border-b border-dark-700">
-                <Settings size={12} className="text-slate-500" />
-                <input value={calendarId} onChange={e => setCalendarId(e.target.value)}
-                    className="flex-1 bg-transparent text-[11px] text-slate-400 outline-none placeholder:text-slate-600"
-                    placeholder="Calendar ID..." />
-                {calendarId !== savedId && (
-                    <button onClick={handleSave} className="text-[10px] font-bold text-primary-400 hover:text-primary-300 flex items-center gap-1">
-                        {saving ? '...' : <><Save size={10} /> Update</>}
-                    </button>
-                )}
-                {justSaved && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><Check size={10} /> Saved</span>}
-            </div>
             <iframe
                 src={embedUrl}
-                className="flex-1 w-full border-0 rounded-b-xl"
+                className="flex-1 w-full border-0"
                 style={{ minHeight: '500px' }}
                 frameBorder="0"
                 scrolling="no"
-                title="Google Calendar"
+                title="Workspace Calendar"
             />
         </div>
     );

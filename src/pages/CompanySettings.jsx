@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { useState, useEffect, useCallback } from 'react';
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
-import { Shield, UserPlus, Loader2, Trash2, Mail, Plug } from 'lucide-react';
+import { Shield, UserPlus, Loader2, Trash2, Mail, Plug, CalendarDays, CheckCircle2, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
 import GoogleCalendarConnect from '../components/shared/GoogleCalendarConnect';
 import { AnimatePresence, motion } from 'framer-motion';
+import { createWorkspaceCalendar } from '../utils/workspaceCalendar';
 
 export default function CompanySettings() {
     const { activeCompany, user } = useStore();
@@ -14,6 +15,10 @@ export default function CompanySettings() {
     const [inviteRole, setInviteRole] = useState('member');
     const [isInviting, setIsInviting] = useState(false);
     const [inviteError, setInviteError] = useState('');
+
+    const [calendarId, setCalendarId] = useState(activeCompany?.calendarId || '');
+    const [hasToken, setHasToken] = useState(null);
+    const [recreating, setRecreating] = useState(false);
 
     const isCompanyOwner = activeCompany?.owner === user?.uid || members.find(m => m.id === user?.uid)?.role === 'owner';
     const isCompanyAdmin = isCompanyOwner || members.find(m => m.id === user?.uid)?.role === 'admin';
@@ -35,6 +40,35 @@ export default function CompanySettings() {
 
         return () => unsubscribeMembers();
     }, [activeCompany?.id, activeCompany?.owner, user?.uid]);
+
+    // Listen for workspace calendar ID on company doc
+    useEffect(() => {
+        if (!activeCompany?.id) return;
+        const ref = doc(db, 'companies', activeCompany.id);
+        const unsub = onSnapshot(ref, (snap) => {
+            setCalendarId(snap.data()?.calendarId || '');
+        });
+        return () => unsub();
+    }, [activeCompany?.id]);
+
+    // Check if Google Calendar token exists
+    useEffect(() => {
+        if (!user?.uid) return;
+        getDoc(doc(db, 'users', user.uid, 'integrations', 'google_calendar')).then(snap => {
+            const data = snap.data();
+            setHasToken(!!(data?.accessToken && (!data.expiresAt || Date.now() < data.expiresAt)));
+        }).catch(() => setHasToken(false));
+    }, [user?.uid]);
+
+    const handleRecreateCalendar = useCallback(async () => {
+        if (!activeCompany?.id || !user?.uid || recreating) return;
+        setRecreating(true);
+        try {
+            const id = await createWorkspaceCalendar(user.uid, activeCompany.name || 'Workspace', activeCompany.id);
+            if (id) setCalendarId(id);
+        } catch {}
+        setRecreating(false);
+    }, [activeCompany?.id, activeCompany?.name, user?.uid, recreating]);
 
     const handleInvite = async (e) => {
         e.preventDefault();
@@ -318,19 +352,96 @@ export default function CompanySettings() {
 
             {/* ── INTEGRATIONS ── */}
             <div className="mt-8 bg-dark-800/60 backdrop-blur-md border border-dark-700 rounded-2xl overflow-hidden shadow-xl">
-                <div className="p-6 border-b border-dark-700 bg-dark-800">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Plug size={18} className="text-primary-400" />
-                        Integrations
-                    </h2>
-                    <p className="text-sm text-slate-400 mt-1">Connect external services to sync data automatically.</p>
-                </div>
-                <div className="p-6 flex items-center justify-between">
-                    <div>
-                        <p className="text-sm font-bold text-white">Google Calendar</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Sync task due dates as calendar events in your Google Calendar.</p>
+                <div className="p-6 border-b border-dark-700 bg-dark-800 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-primary-500/10 border border-primary-500/20 flex items-center justify-center">
+                        <Plug size={17} className="text-primary-400" />
                     </div>
-                    <GoogleCalendarConnect />
+                    <div>
+                        <h2 className="text-base font-bold text-white">Integrations</h2>
+                        <p className="text-xs text-slate-500 mt-0.5">Connect external services to sync data automatically.</p>
+                    </div>
+                </div>
+
+                {/* ── Google Calendar Row ── */}
+                <div className="p-6 border-b border-dark-700/50">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                                <CalendarDays size={18} className="text-blue-400" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-white">Google Calendar</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Connect your personal Google account to auto-create and sync workspace calendars.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="shrink-0">
+                            <GoogleCalendarConnect onConnectionChange={setHasToken} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── Workspace Calendar Status ── */}
+                <div className="p-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
+                                calendarId
+                                    ? 'bg-emerald-500/10 border-emerald-500/20'
+                                    : 'bg-amber-500/10 border-amber-500/20'
+                            }`}>
+                                {calendarId
+                                    ? <CheckCircle2 size={18} className="text-emerald-400" />
+                                    : <AlertTriangle size={18} className="text-amber-400" />
+                                }
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-white">Workspace Calendar</p>
+                                {calendarId ? (
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <p className="text-xs text-emerald-400 font-medium">Active — syncing meetings &amp; tasks</p>
+                                        <a
+                                            href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(calendarId)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-xs text-slate-500 hover:text-primary-400 flex items-center gap-1 transition-colors"
+                                        >
+                                            <ExternalLink size={11} /> Open
+                                        </a>
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-amber-400/80 mt-0.5">
+                                        {hasToken === false
+                                            ? 'Connect Google Calendar above to create a workspace calendar.'
+                                            : hasToken === null
+                                            ? 'Checking connection...'
+                                            : 'No workspace calendar yet. Click to auto-create.'}
+                                    </p>
+                                )}
+                                {calendarId && (
+                                    <p className="text-[10px] text-slate-600 mt-1 font-mono truncate max-w-xs">{calendarId}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {hasToken === true && isCompanyAdmin && (
+                            <button
+                                onClick={handleRecreateCalendar}
+                                disabled={recreating}
+                                className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 ${
+                                    calendarId
+                                        ? 'bg-dark-700 hover:bg-dark-600 text-slate-300 border border-dark-600'
+                                        : 'bg-primary-600 hover:bg-primary-500 text-white shadow-lg shadow-primary-500/20'
+                                }`}
+                            >
+                                {recreating
+                                    ? <><Loader2 size={13} className="animate-spin" /> Creating…</>
+                                    : <><RefreshCw size={13} /> {calendarId ? 'Re-create Calendar' : 'Create Workspace Calendar'}</>
+                                }
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

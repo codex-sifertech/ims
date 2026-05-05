@@ -54,8 +54,9 @@ service cloud.firestore {
       allow read: if isCompanyMember(companyId) || isMasterAdmin() ||
                      (isAuth() && request.auth.token.email in resource.data.accessList);
       allow create: if isAuth();
-      allow update: if isCompanyAdmin(companyId) || isMasterAdmin();
-      allow delete: if isMasterAdmin();
+      allow update: if isCompanyAdmin(companyId) || isMasterAdmin() ||
+                      (isAuth() && resource.data.owner == request.auth.uid);
+      allow delete: if (isAuth() && resource.data.owner == request.auth.uid) || isMasterAdmin();
 
       // Members — admins can manage all; any authenticated user can create/update their own doc
       match /members/{memberId} {

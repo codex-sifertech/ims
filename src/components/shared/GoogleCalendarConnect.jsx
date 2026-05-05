@@ -5,7 +5,8 @@ import useStore from '../../store/useStore';
 import { CheckCircle2, Calendar, Loader2, ExternalLink } from 'lucide-react';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '791274596080-bv0l4otccm3hkm0utcu42u9cchavfqpj.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/calendar.events';
+// Full calendar scope — needed to create workspace calendars and manage ACLs
+const SCOPES = 'https://www.googleapis.com/auth/calendar';
 
 function loadGsiScript() {
     return new Promise((resolve) => {
@@ -19,11 +20,13 @@ function loadGsiScript() {
     });
 }
 
-export default function GoogleCalendarConnect() {
+export default function GoogleCalendarConnect({ onConnectionChange } = {}) {
     const { user } = useStore();
     const [connected, setConnected] = useState(false);
     const [loading, setLoading] = useState(true);
     const [connecting, setConnecting] = useState(false);
+
+    const notifyChange = (val) => onConnectionChange?.(val);
 
     // Check if already connected
     useEffect(() => {
@@ -65,6 +68,7 @@ export default function GoogleCalendarConnect() {
                         connectedAt: new Date().toISOString(),
                     });
                     setConnected(true);
+                    notifyChange(true);
                     setConnecting(false);
                 },
             });
@@ -80,6 +84,7 @@ export default function GoogleCalendarConnect() {
         const ref = doc(db, 'users', user.uid, 'integrations', 'google_calendar');
         await setDoc(ref, { accessToken: null });
         setConnected(false);
+        notifyChange(false);
     };
 
     if (loading) {

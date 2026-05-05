@@ -52,66 +52,89 @@ export default function DashboardLayout() {
 
     const isDashboardActive = location.pathname === '/dashboard';
 
+    // Robust active-state: handles query-string paths like /my-board?tab=calendar
+    const isNavActive = (item) => {
+        const [itemPath, itemQuery] = item.path.split('?');
+        if (itemQuery) {
+            const params = new URLSearchParams(itemQuery);
+            const locParams = new URLSearchParams(location.search);
+            return location.pathname === itemPath &&
+                [...params.entries()].every(([k, v]) => locParams.get(k) === v);
+        }
+        return location.pathname === item.path;
+    };
+
     return (
         <div className="flex h-screen bg-dark-900 overflow-hidden w-full">
             {/* Sidebar Navigation */}
-            <aside className={`transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-dark-800 border-r border-dark-700 flex flex-col justify-between relative group`}>
+            <aside className={`transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-[72px]' : 'w-60'} bg-dark-800 border-r border-dark-700/80 flex flex-col justify-between relative group shrink-0`}>
                 {/* Collapse Toggle */}
-                <button 
+                <button
                     onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}
-                    className="absolute -right-3 top-20 w-6 h-6 bg-dark-700 border border-dark-600 rounded-full flex items-center justify-center text-slate-400 hover:text-white transition-colors z-10 opacity-0 group-hover:opacity-100 shadow-xl"
+                    className="absolute -right-3 top-[72px] w-6 h-6 bg-dark-700 border border-dark-600 rounded-full flex items-center justify-center text-slate-400 hover:text-white transition-all z-10 opacity-0 group-hover:opacity-100 shadow-lg hover:shadow-xl"
                 >
-                    {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+                    {isSidebarCollapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
                 </button>
 
                 <div className="flex flex-col flex-1 overflow-y-auto custom-scrollbar overflow-x-hidden">
-                    <div className={`h-16 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'px-6'} border-b border-dark-700 shrink-0`}>
+                    {/* Logo / Brand */}
+                    <div className={`h-14 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'px-5'} border-b border-dark-700/80 shrink-0`}>
                         {isSidebarCollapsed ? (
-                            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white font-black">IMS</div>
+                            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white font-black text-xs tracking-widest shadow-lg shadow-primary-600/30">
+                                IMS
+                            </div>
                         ) : (
-                            <h1 className="text-xl font-bold text-white tracking-tight">IMS Platform</h1>
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 bg-primary-600 rounded-lg flex items-center justify-center text-white font-black text-[10px] shadow-md shadow-primary-600/30">
+                                    IMS
+                                </div>
+                                <span className="text-sm font-bold text-white tracking-tight">IMS Platform</span>
+                            </div>
                         )}
                     </div>
 
                     {/* Company Switcher */}
-                    <div className={`${isSidebarCollapsed ? 'px-2' : 'px-4'} mt-6 shrink-0`}>
+                    <div className={`${isSidebarCollapsed ? 'px-2' : 'px-3'} mt-4 shrink-0`}>
                         <CompanySwitcher isCollapsed={isSidebarCollapsed} />
                     </div>
 
-                    <nav className={`mt-6 ${isSidebarCollapsed ? 'px-2' : 'px-4'} space-y-1 pb-4`}>
+                    <nav className={`mt-4 ${isSidebarCollapsed ? 'px-2' : 'px-3'} space-y-0.5 pb-4`}>
                         {navItems.map((item) => {
                             if (item.isParent) {
                                 return (
-                                    <div key={item.name} className="flex flex-col space-y-1">
-                                        <div 
+                                    <div key={item.name} className="flex flex-col">
+                                        <div
                                             onClick={() => !isSidebarCollapsed && setDashboardExpanded(!dashboardExpanded)}
-                                            className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
-                                                isDashboardActive ? 'bg-primary-600/10 text-primary-400' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+                                            className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} px-3 py-2 rounded-xl text-sm font-medium cursor-pointer transition-all ${
+                                                isDashboardActive
+                                                    ? 'bg-primary-500/10 text-primary-400'
+                                                    : 'text-slate-400 hover:bg-dark-700/60 hover:text-slate-200'
                                             }`}
                                             title={isSidebarCollapsed ? item.name : ''}
                                         >
                                             <div className="flex items-center gap-3">
                                                 {item.icon}
-                                                {!isSidebarCollapsed && item.name}
+                                                {!isSidebarCollapsed && <span className="text-[13px]">{item.name}</span>}
                                             </div>
-                                            {!isSidebarCollapsed && <ChevronDown size={16} className={`transition-transform ${dashboardExpanded ? 'rotate-180' : ''}`} />}
+                                            {!isSidebarCollapsed && (
+                                                <ChevronDown size={14} className={`text-slate-500 transition-transform duration-200 ${dashboardExpanded ? 'rotate-180' : ''}`} />
+                                            )}
                                         </div>
-                                        
+
                                         {/* Submenu */}
                                         {dashboardExpanded && !isSidebarCollapsed && (
-                                            <div className="pl-9 pr-2 space-y-1 mt-1">
+                                            <div className="pl-8 pr-1 space-y-0.5 mt-0.5 mb-1">
                                                 {item.children.map(child => {
                                                     const isActive = isDashboardActive && location.search === child.path.substring(child.path.indexOf('?'));
                                                     const isHomeActive = isDashboardActive && !location.search && child.path.includes('tab=home');
-                                                    
                                                     return (
                                                         <Link
                                                             key={child.name}
                                                             to={child.path}
-                                                            className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                                                            className={`block px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
                                                                 isActive || isHomeActive
-                                                                ? 'bg-dark-700 text-white font-medium shadow-sm border border-dark-600'
-                                                                : 'text-slate-500 hover:text-slate-300 hover:bg-dark-700/50'
+                                                                    ? 'bg-primary-500/10 text-primary-300'
+                                                                    : 'text-slate-500 hover:text-slate-300 hover:bg-dark-700/50'
                                                             }`}
                                                         >
                                                             {child.name}
@@ -124,18 +147,23 @@ export default function DashboardLayout() {
                                 );
                             }
 
+                            const active = isNavActive(item);
                             return (
                                 <Link
                                     key={item.name}
                                     to={item.path}
-                                    className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                                        location.pathname === item.path
-                                        ? item.danger ? 'bg-rose-500/10 text-rose-400' : 'bg-primary-600/10 text-primary-400'
-                                        : item.danger ? 'text-rose-500/70 hover:bg-rose-500/10 hover:text-rose-400' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+                                    className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2 rounded-xl text-[13px] font-medium transition-all ${
+                                        active
+                                            ? item.danger
+                                                ? 'bg-rose-500/10 text-rose-400'
+                                                : 'bg-primary-500/10 text-primary-400'
+                                            : item.danger
+                                                ? 'text-rose-500/60 hover:bg-rose-500/10 hover:text-rose-400'
+                                                : 'text-slate-400 hover:bg-dark-700/60 hover:text-slate-200'
                                     }`}
                                     title={isSidebarCollapsed ? item.name : ''}
                                 >
-                                    {item.icon}
+                                    <span className={active && !item.danger ? 'text-primary-400' : ''}>{item.icon}</span>
                                     {!isSidebarCollapsed && item.name}
                                 </Link>
                             );
@@ -143,7 +171,8 @@ export default function DashboardLayout() {
                     </nav>
                 </div>
 
-                <div className="shrink-0 mt-auto pt-4 border-t border-dark-700 bg-dark-800 overflow-x-hidden">
+                {/* Bottom Section */}
+                <div className="shrink-0 border-t border-dark-700/80 bg-dark-800 overflow-x-hidden">
                     {!isSidebarCollapsed && (
                         <GlobalTimeTracker
                             isCheckedIn={isCheckedIn}
@@ -151,42 +180,46 @@ export default function DashboardLayout() {
                             onToggle={handleCheckInToggle}
                         />
                     )}
-                    <div className="flex flex-col gap-2 p-3">
+                    <div className="flex flex-col gap-0.5 p-2">
+                        {/* User Info */}
                         {!isSidebarCollapsed ? (
-                            <div className="flex items-center justify-between px-4 py-2">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                            <div className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-dark-700/40 transition-colors">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-7 h-7 rounded-full bg-primary-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
                                         {user?.name?.charAt(0) || user?.email?.charAt(0) || '?'}
                                     </div>
-                                    <div className="text-xs truncate max-w-[100px]">
-                                        <p className="text-white font-medium truncate w-full">{user?.name || user?.email}</p>
-                                        <p className="text-slate-500">Online</p>
+                                    <div className="min-w-0">
+                                        <p className="text-[12px] text-white font-semibold truncate">{user?.name || user?.email}</p>
+                                        <p className="text-[10px] text-emerald-500 font-medium flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                                            Online
+                                        </p>
                                     </div>
                                 </div>
                                 <NotificationDropdown />
                             </div>
                         ) : (
-                            <div className="flex justify-center py-2">
+                            <div className="flex justify-center py-1.5">
                                 <NotificationDropdown />
                             </div>
                         )}
 
                         <button
                             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                            className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg text-sm font-medium text-slate-400 hover:bg-dark-700 hover:text-white transition-colors`}
+                            className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 rounded-xl text-[13px] font-medium text-slate-400 hover:bg-dark-700/60 hover:text-slate-200 transition-all`}
                             title={isSidebarCollapsed ? (theme === 'dark' ? 'Day Mode' : 'Night Mode') : ''}
                         >
-                            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
                             {!isSidebarCollapsed && (theme === 'dark' ? 'Day Mode' : 'Night Mode')}
                         </button>
 
                         <button
                             onClick={() => auth.signOut()}
-                            className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors`}
-                            title={isSidebarCollapsed ? 'Logout' : ''}
+                            className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 rounded-xl text-[13px] font-medium text-slate-500 hover:bg-rose-500/10 hover:text-rose-400 transition-all`}
+                            title={isSidebarCollapsed ? 'Sign Out' : ''}
                         >
-                            <LogOut size={20} />
-                            {!isSidebarCollapsed && 'Logout'}
+                            <LogOut size={17} />
+                            {!isSidebarCollapsed && 'Sign Out'}
                         </button>
                     </div>
                 </div>
